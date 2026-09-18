@@ -1,0 +1,18 @@
+# 参考用：这是本套件最终生成的 systemd 单元长什么样
+# 实际不用手工装 —— ocserv-panel/install.sh 会按你的 --prefix/--host/--port 自动生成
+[Unit]
+Description=ocserv 管理面板
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ocserv-panel
+ExecStart=/usr/bin/node /opt/ocserv-panel/server.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

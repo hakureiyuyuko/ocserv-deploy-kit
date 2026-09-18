@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ocserv 管理面板</title>
+<script>(function(){try{document.documentElement.dataset.theme=localStorage.getItem('ocsp-theme')||'light';}catch(e){document.documentElement.dataset.theme='light';}})();</script>
+<style>
+  :root{--bg:#eef1f6;--panel:#ffffff;--panel2:#f4f7fb;--line:#c2ccdc;--fg:#0f131b;--dim:#4b5670;
+        --acc:#1a5fd0;--ok:#0f7a45;--warn:#9c5c07;--err:#bb2d22;--warnfg:#ffffff;--inputbg:#ffffff;
+        --prebg:#f6f8fc;--switchoff:#9aa7bd;--shadow:0 2px 8px #0b122026;
+        --tagokbg:#e2f4ea;--tagokbd:#94cfb0;--tagerrbg:#fceceb;--tagerrbd:#edaca6;
+        --tagwarnbg:#fdf3e0;--tagwarnbd:#e7cb95;}
+  html[data-theme="dark"]{--bg:#0f1420;--panel:#171e2e;--panel2:#1e2739;--line:#2a3550;--fg:#dfe6f5;--dim:#8592ad;
+        --acc:#4c8dff;--ok:#2fbf71;--warn:#e8a33d;--err:#e5544b;--warnfg:#231a05;--inputbg:#101725;
+        --prebg:#0b111c;--switchoff:#5a6782;--shadow:0 6px 20px #00000080;
+        --tagokbg:#10251a;--tagokbd:#1d5c3c;--tagerrbg:#2a1310;--tagerrbd:#5c211d;
+        --tagwarnbg:#2a2210;--tagwarnbd:#5c4420;}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg)}
+  a{color:var(--acc)}
+  header{display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.5px}
+  header .sp{flex:1}
+  header .who{color:var(--dim);font-size:13px}
+  nav{display:flex;gap:4px;padding:10px 20px 0;flex-wrap:wrap}
+  nav button{background:transparent;border:1px solid transparent;color:var(--dim);padding:7px 14px;border-radius:8px 8px 0 0;cursor:pointer;font-size:14px}
+  nav button:hover{color:var(--fg);background:var(--panel)}
+  nav button.on{color:var(--fg);background:var(--panel);border-color:var(--line);border-bottom-color:var(--panel)}
+  main{padding:18px 20px 60px;max-width:1200px}
+  .view{display:none}.view.on{display:block}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .card .k{color:var(--dim);font-size:12px;margin-bottom:6px}
+  .card .v{font-size:20px;font-weight:600;word-break:normal;overflow-wrap:anywhere}
+  .card .s{color:var(--dim);font-size:12px;margin-top:4px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:16px}
+  .box h2{font-size:14px;margin:0 0 12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+  .box h2 .muted{text-transform:none;letter-spacing:0;font-weight:400}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--dim);font-weight:500;font-size:12px}
+  tr:hover td{background:var(--panel2)}
+  input,textarea,select{background:var(--inputbg);border:1px solid var(--line);color:var(--fg);border-radius:7px;padding:7px 10px;font:inherit;outline:none}
+  input:focus,textarea:focus{border-color:var(--acc)}
+  button.btn{background:var(--acc);color:#fff;border:0;border-radius:7px;padding:8px 14px;cursor:pointer;font:inherit}
+  button.btn:hover{filter:brightness(1.1)}
+  button.btn.gray{background:var(--panel2);color:var(--fg);border:1px solid var(--line)}
+  button.btn.red{background:var(--err)}
+  button.btn.warn{background:var(--warn);color:var(--warnfg)}
+  button.btn:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;border:1px solid var(--line)}
+  .tag.ok{color:var(--ok);border-color:var(--tagokbd);background:var(--tagokbg)}
+  .tag.err{color:var(--err);border-color:var(--tagerrbd);background:var(--tagerrbg)}
+  .tag.warn{color:var(--warn);border-color:var(--tagwarnbd);background:var(--tagwarnbg)}
+  pre{background:var(--prebg);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;max-height:60vh;font:12px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
+  textarea{width:100%;min-height:52vh;font:12px/1.55 ui-monospace,Consolas,monospace;white-space:pre;overflow:auto}
+  .muted{color:var(--dim)}
+  #login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:99}
+  #login .form{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px;width:340px}
+  #login h2{margin:0 0 18px;font-size:17px}
+  #login input{width:100%;margin-bottom:12px}
+  #login button{width:100%}
+  #toast{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:200}
+  .t{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:8px;padding:10px 14px;max-width:420px;font-size:13px;box-shadow:var(--shadow);white-space:pre-wrap}
+  /* 开关 */
+  .opt{display:flex;gap:16px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)}
+  .opt:last-child{border-bottom:0;padding-bottom:0}
+  .optx{flex:1;min-width:0}
+  .optl{font-weight:600;margin-bottom:4px;font-size:14px}
+  .optd{color:var(--dim);font-size:12.5px;line-height:1.55}
+  .sw{position:relative;display:inline-block;width:48px;height:26px;flex:0 0 auto;margin-top:2px}
+  .sw input{opacity:0;width:0;height:0;position:absolute}
+  .sw span{position:absolute;inset:0;background:var(--switchoff);border-radius:26px;transition:background .2s;cursor:pointer}
+  .sw span:before{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px #00000040}
+  .sw input:checked+span{background:var(--ok)}
+  .sw input:checked+span:before{transform:translateX(22px)}
+  .sw input:disabled+span{opacity:.45;cursor:not-allowed}
+  .sw input:focus-visible+span{outline:2px solid var(--acc);outline-offset:2px}
+  .t.ok{border-left-color:var(--ok)}.t.err{border-left-color:var(--err)}.t.warn{border-left-color:var(--warn)}
+  .hide{display:none!important}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="form">
+    <h2 id="ltitle">ocserv 管理面板</h2>
+    <input id="lu" placeholder="用户名" autocomplete="username">
+    <input id="lp" type="password" placeholder="密码" autocomplete="current-password">
+    <button class="btn" id="lbtn">登录</button>
+    <div class="muted" style="margin-top:12px;font-size:12px" id="lerr"></div>
+  </div>
+</div>
+
+<header class="hide" id="hdr">
+  <h1 id="ptitle">ocserv 管理面板</h1>
+  <span class="sp"></span>
+  <span class="who" id="who"></span>
+  <button class="btn gray" id="themeBtn" title="切换日间/夜间模式">夜间模式</button>
+  <button class="btn gray" id="logout">退出</button>
+</header>
+
+<nav class="hide" id="nav">
+  <button data-v="ov" class="on">概览</button>
+  <button data-v="wz">配置向导</button>
+  <button data-v="us">用户管理</button>
+  <button data-v="ss">在线会话</button>
+  <button data-v="op">选项</button>
+  <button data-v="lg">日志</button>
+  <button data-v="cf">配置</button>
+  <button data-v="ct">证书</button>
+  <button data-v="pn">面板设置</button>
+</nav>
+
+<main class="hide" id="main">
+
+  <section class="view on" id="v-ov">
+    <div id="ovBanner"></div>
+    <div class="cards" id="ovCards"></div>
+    <div class="box">
+      <h2>服务控制</h2>
+      <div class="row">
+        <button class="btn gray" data-svc="start">启动</button>
+        <button class="btn gray" data-svc="restart">重启</button>
+        <button class="btn" data-svc="reload">重载配置(不断线)</button>
+        <button class="btn red" data-svc="stop">停止</button>
+        <span class="muted" id="svcOut"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="v-us">
+    <div class="box">
+      <h2>新增用户 / 重置密码</h2>
+      <div class="row">
+        <input id="nu" placeholder="用户名" style="width:200px">
+        <input id="np" placeholder="密码(≥6位)" style="width:220px">
+        <button class="btn" id="addUser">保存</button>
+        <span class="muted">已存在则覆盖密码</span>
+      </div>
+    </div>
+    <div class="box">
+      <h2>用户列表 (<span id="ucount">0</span>)</h2>
+      <table><thead><tr><th>用户名</th><th>组</th><th>状态</th><th style="width:200px">操作</th></tr></thead>
+      <tbody id="utb"></tbody></table>
+    </div>
+  </section>
+
+  <section class="view" id="v-ss">
+    <div class="box">
+      <h2>在线会话 <button class="btn gray" style="float:right;padding:3px 10px;font-size:12px" onclick="loadSessions()">刷新</button></h2>
+      <div id="ssBox"></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-op">
+    <div class="box">
+      <h2>功能开关 <span class="muted">写入 ocserv.conf，自动备份 + 校验，失败回滚，成功后热重载</span></h2>
+      <div id="optBox">加载中…</div>
+    </div>
+  </section>
+
+  <section class="view" id="v-lg">
+    <div class="box">
+      <h2>ocserv 日志</h2>
+      <div class="row" style="margin-bottom:10px">
+        <input id="lines" value="200" style="width:90px">
+        <button class="btn gray" onclick="loadLogs()">刷新</button>
+        <label class="muted"><input type="checkbox" id="autoLog"> 自动刷新(5s)</label>
+      </div>
+      <pre id="logBox">加载中…</pre>
+    </div>
+  </section>
+
+  <section class="view" id="v-cf">
+    <div class="box">
+      <h2>ocserv 配置 <span class="muted" id="cfgMeta"></span></h2>
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn" id="saveCfg">保存并校验</button>
+        <button class="btn gray" onclick="loadConfig()">重新读取</button>
+        <span class="muted">保存前会备份；校验失败自动回滚</span>
+      </div>
+      <textarea id="cfg"></textarea>
+    </div>
+  </section>
+
+  <section class="view" id="v-ct">
+    <div class="box">
+      <h2>证书信息</h2>
+      <div id="ctBox"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn gray" id="renewCheck">检查续期</button>
+        <button class="btn warn" id="renewForce">强制续期</button>
+      </div>
+    </div>
+    <div class="box">
+      <h2>续期日志 <span class="muted" id="renLogPath"></span></h2>
+      <pre id="renBox">加载中…</pre>
+    </div>
+  </section>
+  <section class="view" id="v-pn">
+    <div class="box">
+      <h2>修改管理员密码 <span class="muted" id="pnUser"></span></h2>
+      <div class="row" style="margin-bottom:8px">
+        <label class="muted" style="width:110px">当前密码</label>
+        <input id="pwOld" type="password" autocomplete="current-password" style="width:240px">
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="muted" style="width:110px">新密码</label>
+        <input id="pwNew" type="password" autocomplete="new-password" style="width:240px">
+        <span class="muted">至少 6 位</span>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <label class="muted" style="width:110px">确认新密码</label>
+        <input id="pwNew2" type="password" autocomplete="new-password" style="width:240px">
+      </div>
+      <div class="row">
+        <button class="btn" id="pwSave">保存新密码</button>
+        <span class="muted">保存后立即生效，不用重启面板。</span>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>面板监听端口</h2>
+      <div class="row" style="margin-bottom:12px">
+        <label class="muted" style="width:110px">当前端口</label>
+        <b id="pnPort">-</b>
+        <span class="muted" id="pnHost"></span>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="muted" style="width:110px">新端口</label>
+        <input id="pnNewPort" style="width:110px" placeholder="如 19999">
+        <span class="muted">建议用 1024~65535；先检测端口能否监听，不能就不改</span>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <label class="muted" style="width:110px">当前密码</label>
+        <input id="pnPass" type="password" autocomplete="current-password" style="width:240px">
+      </div>
+      <div class="row">
+        <button class="btn warn" id="pnSave">保存并重启面板</button>
+        <span class="muted">保存后面板自动重启并换到新端口，当前登录会话会失效，请用新地址重新登录。</span>
+      </div>
+      <div class="muted" id="pnMsg" style="margin-top:10px;font-size:12.5px"></div>
+      <div class="muted" style="margin-top:6px;font-size:12.5px">若路由器/防火墙做过端口映射，记得同步改成新端口；起不来时可在服务器上改 <code style="white-space:nowrap"><span id="pnCfgPath">config.json</span></code> 里的 port 后 <code style="white-space:nowrap">systemctl restart ocserv-panel</code>。</div>
+    </div>
+  </section>
+
+  <section class="view" id="v-wz">
+    <div class="box" id="wzState">加载中…</div>
+
+    <div class="box">
+      <h2>第 1 步 · 基础</h2>
+      <div class="row" style="margin-bottom:8px">
+        <label class="muted" style="width:110px">域名</label>
+        <input id="wzDomain" placeholder="ssl.example.com" style="width:280px">
+        <span class="muted">证书签发和 VPN 都用它，需能解析到本机（DNS-01 不要求可达）</span>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="muted" style="width:110px">VPN 端口</label>
+        <input id="wzPort" value="443" style="width:90px">
+        <label class="muted" style="width:90px;margin-left:20px">客户端网段</label>
+        <input id="wzNet" value="10.66.66.0" style="width:130px">
+        <input id="wzMask" value="255.255.255.0" style="width:140px">
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="muted" style="width:110px">下发 DNS</label>
+        <input id="wzDns1" value="1.1.1.1" style="width:130px">
+        <input id="wzDns2" value="8.8.8.8" style="width:130px">
+      </div>
+      <div class="row">
+        <label class="muted" style="width:110px">NAT 出口网卡</label>
+        <input id="wzOutIf" value="" placeholder="自动探测" style="width:130px">
+        <span class="muted">客户端上网走哪张网卡</span>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>第 2 步 · 证书</h2>
+      <div class="row" style="margin-bottom:10px">
+        <label class="muted"><input type="radio" name="wzmode" value="dns" checked> DNS-01（推荐，不需要 80 端口）</label>
+        <label class="muted"><input type="radio" name="wzmode" value="http"> HTTP-01（需公网 80）</label>
+        <label class="muted"><input type="radio" name="wzmode" value="upload"> 上传已有证书</label>
+        <label class="muted"><input type="radio" name="wzmode" value="selfsigned"> 自签（仅测试）</label>
+      </div>
+      <div id="wzDns">
+        <div class="row" style="margin-bottom:8px">
+          <label class="muted" style="width:110px">DNS 服务商</label>
+          <select id="wzProv"></select>
+          <label class="muted" style="margin-left:14px">等 TXT 生效</label>
+          <input id="wzSleep" value="30" style="width:64px"><span class="muted">秒</span>
+        </div>
+        <div id="wzFields"></div>
+        <div class="row" style="margin-top:8px">
+          <label class="muted" style="width:110px">额外变量</label>
+          <input id="wzExtra" style="flex:1;min-width:320px" placeholder="没列出的服务商可在此写 KEY=VALUE（逗号或换行分隔）">
+        </div>
+      </div>
+      <div id="wzUpload" class="hide">
+        <textarea id="wzCertPem" style="min-height:110px" placeholder="fullchain 证书（-----BEGIN CERTIFICATE----- …，可含中间证书）"></textarea>
+        <textarea id="wzKeyPem" style="min-height:110px;margin-top:8px" placeholder="私钥（-----BEGIN PRIVATE KEY----- …）"></textarea>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label class="muted" style="width:110px">LE 账号邮箱</label>
+        <input id="wzEmail" placeholder="可留空（只是收不到到期提醒）" style="width:280px">
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="wzCertBtn">签发 / 安装证书</button>
+        <span class="muted">DNS-01 可能要等 1~2 分钟</span>
+      </div>
+      <pre id="wzCertLog" class="hide" style="margin-top:12px"></pre>
+    </div>
+
+    <div class="box">
+      <h2>第 3 步 · 第一个 VPN 用户</h2>
+      <div class="row">
+        <input id="wzUser" value="vpnuser" style="width:200px">
+        <input id="wzPass" placeholder="密码（≥ 6 位）" style="width:240px">
+        <button class="btn gray" id="wzRand">随机密码</button>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>第 4 步 · 应用</h2>
+      <div class="row">
+        <button class="btn" id="wzApplyBtn">开始部署</button>
+        <span class="muted">写 ocserv.conf → 装 NAT 单元 → 装续期 cron → 启动 ocserv</span>
+      </div>
+      <pre id="wzLog" class="hide" style="margin-top:12px"></pre>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+function toast(msg, kind) {
+  const d = document.createElement('div');
+  d.className = 't ' + (kind || '');
+  d.textContent = msg;
+  $('#toast').appendChild(d);
+  setTimeout(() => { d.style.opacity = '0'; d.style.transition = 'opacity .4s'; }, 4000);
+  setTimeout(() => d.remove(), 4600);
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  const init = { method: opts.method || 'GET', headers: { 'x-panel': '1' }, credentials: 'same-origin' };
+  if (opts.body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+  const r = await fetch(path, init);
+  let j = null;
+  try { j = await r.json(); } catch (e) {}
+  if (r.status === 401 && path !== '/api/login') { showLogin(); throw new Error('未登录'); }
+  if (!r.ok) throw new Error((j && j.error) || ('HTTP ' + r.status));
+  return j;
+}
+
+function showLogin() {
+  $('#login').classList.remove('hide');
+  $('#hdr').classList.add('hide'); $('#nav').classList.add('hide'); $('#main').classList.add('hide');
+}
+function showApp(user) {
+  $('#login').classList.add('hide');
+  $('#hdr').classList.remove('hide'); $('#nav').classList.remove('hide'); $('#main').classList.remove('hide');
+  $('#who').textContent = user;
+  switchView('ov');
+  checkInit();
+}
+
+$('#lbtn').onclick = async () => {
+  $('#lerr').textContent = '';
+  try {
+    const r = await api('/api/login', { method: 'POST', body: { username: $('#lu').value.trim(), password: $('#lp').value } });
+    showApp(r.user); toast('登录成功', 'ok'); loadOverview();
+  } catch (e) { $('#lerr').textContent = e.message; }
+};
+$('#lp').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#lbtn').click(); });
+$('#logout').onclick = async () => {
+  try { await api('/api/logout', { method: 'POST', body: {} }); } catch (e) {}
+  showLogin();
+};
+
+function switchView(v) {
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  document.querySelectorAll('.view').forEach((s) => s.classList.toggle('on', s.id === 'v-' + v));
+  if (v === 'ov') loadOverview();
+  if (v === 'us') loadUsers();
+  if (v === 'ss') loadSessions();
+  if (v === 'op') loadOptions();
+  if (v === 'lg') loadLogs();
+  if (v === 'cf') loadConfig();
+  if (v === 'ct') loadCert();
+  if (v === 'pn') loadPanel();
+  if (v === 'wz') loadWizard();
+}
+document.querySelectorAll('nav button').forEach((b) => { b.onclick = () => switchView(b.dataset.v); });
+
+function fmtBytes(n) {
+  if (n === undefined || n === null) return '-';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i ? 2 : 0) + ' ' + u[i];
+}
+function fmtDur(s) {
+  s = Math.floor(s || 0);
+  const d = Math.floor(s / 86400); s %= 86400;
+  const h = Math.floor(s / 3600); s %= 3600;
+  const m = Math.floor(s / 60);
+  return (d ? d + '天' : '') + (h ? h + '小时' : '') + m + '分钟';
+}
+const esc = (s) => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function loadOverview() {
+  try {
+    const d = await api('/api/overview');
+    const o = d.ocserv || {}, c = d.cert || {}, sys = d.system || {};
+    const up = o.ActiveState === 'active';
+    const days = c.daysLeft;
+    const dcls = days === undefined ? '' : (days < 15 ? 'err' : (days < 30 ? 'warn' : 'ok'));
+    const ls = o.listen || [];
+    const tcp = (ls.filter((x) => x.proto === 'TCP')[0] || {}).port;
+    const udp = (ls.filter((x) => x.proto === 'UDP')[0] || {}).port;
+    const ports = !ls.length ? '-'
+      : (tcp && udp && tcp === udp ? 'TCP/UDP ' + tcp : ls.map((x) => x.proto + ' ' + x.port).join(' · '));
+    $('#ovCards').innerHTML = [
+      card('服务状态', '<span class="tag ' + (up ? 'ok' : 'err') + '">' + esc(o.ActiveState || '-') + '</span>',
+           esc(o.SubState || '') + ' · PID ' + esc(o.MainPID || '-')),
+      card('监听端口', esc(ports), esc(o.version || '')),
+      card('证书剩余', days === undefined ? '-' : '<span class="tag ' + dcls + '">' + days + ' 天</span>',
+           esc(c.subject || '') + '<br>' + esc(c.notAfter || '')),
+      card('VPN 用户', esc((d.users || {}).count), esc(((d.users || {}).names || []).join(', ')) || '无'),
+      card('在线会话', esc((d.sessions || {}).count), ''),
+      card('系统负载', (sys.loadavg || []).join(' / '), '内存 ' + esc((sys.mem || {}).percent) + '% · 运行 ' + fmtDur(sys.uptime))
+    ].join('');
+  } catch (e) { toast(e.message, 'err'); }
+}
+function card(k, v, s) {
+  return '<div class="card"><div class="k">' + k + '</div><div class="v">' + (v === undefined ? '-' : v) + '</div><div class="s">' + (s || '') + '</div></div>';
+}
+
+document.querySelectorAll('[data-svc]').forEach((b) => {
+  b.onclick = async () => {
+    const act = b.dataset.svc;
+    if (act === 'stop' || act === 'restart') { if (!confirm('确认 ' + (act === 'stop' ? '停止' : '重启') + ' ocserv？' + (act === 'restart' ? '在线用户会掉线。' : ''))) return; }
+    b.disabled = true;
+    try {
+      const r = await api('/api/service', { method: 'POST', body: { action: act } });
+      toast('操作完成: ' + r.state + '/' + r.sub, 'ok'); loadOverview();
+    } catch (e) { toast(e.message, 'err'); }
+    b.disabled = false;
+  };
+});
+
+async function loadUsers() {
+  try {
+    const d = await api('/api/users');
+    $('#ucount').textContent = d.users.length;
+    $('#utb').innerHTML = d.users.map((u) =>
+      '<tr><td><b>' + esc(u.name) + '</b></td><td class="muted">' + esc(u.group || '-') + '</td>' +
+      '<td>' + (u.hasHash ? '<span class="tag ok">已启用</span>' : '<span class="tag warn">无密码</span>') + '</td>' +
+      '<td><button class="btn gray" onclick="resetPwd(\'' + esc(u.name) + '\')">改密码</button> ' +
+      '<button class="btn red" onclick="delUser(\'' + esc(u.name) + '\')">删除</button></td></tr>'
+    ).join('') || '<tr><td colspan="4" class="muted">暂无用户</td></tr>';
+  } catch (e) { toast(e.message, 'err'); }
+}
+$('#addUser').onclick = async () => {
+  const u = $('#nu').value.trim(), p = $('#np').value;
+  if (!u || !p) return toast('请填写用户名和密码', 'warn');
+  try {
+    await api('/api/users', { method: 'POST', body: { action: 'add', username: u, password: p } });
+    toast('已保存用户 ' + u, 'ok'); $('#nu').value = ''; $('#np').value = ''; loadUsers();
+  } catch (e) { toast(e.message, 'err'); }
+};
+async function resetPwd(name) {
+  const p = prompt('给 ' + name + ' 设置新密码 (≥6位):');
+  if (!p) return;
+  try { await api('/api/users', { method: 'POST', body: { action: 'passwd', username: name, password: p } }); toast('密码已更新', 'ok'); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function delUser(name) {
+  if (!confirm('确认删除用户 ' + name + '？')) return;
+  try { await api('/api/users', { method: 'POST', body: { action: 'del', username: name } }); toast('已删除', 'ok'); loadUsers(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function loadSessions() {
+  $('#ssBox').textContent = '加载中…';
+  try {
+    const d = await api('/api/sessions');
+    if (d.error) { $('#ssBox').innerHTML = '<span class="muted">' + esc(d.error) + '</span>'; return; }
+    if (!d.list.length) { $('#ssBox').innerHTML = '<span class="muted">当前没有在线用户</span>'; return; }
+    if (d.json) {
+      const keys = Object.keys(d.list[0]).slice(0, 8);
+      $('#ssBox').innerHTML = '<table><thead><tr>' + keys.map((k) => '<th>' + esc(k) + '</th>').join('') + '</tr></thead><tbody>' +
+        d.list.map((r) => '<tr>' + keys.map((k) => '<td>' + esc(typeof r[k] === 'object' ? JSON.stringify(r[k]) : r[k]) + '</td>').join('') + '</tr>').join('') +
+        '</tbody></table>';
+    } else {
+      $('#ssBox').innerHTML = '<table><thead><tr><th>ID</th><th>用户</th><th>设备</th><th>来源 IP</th><th>建立时间</th></tr></thead><tbody>' +
+        d.list.map((r) => '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.user) + '</td><td>' + esc(r.device) + '</td><td>' + esc(r.remote_ip) + '</td><td class="muted">' + esc(r.since) + '</td></tr>').join('') +
+        '</tbody></table>';
+    }
+  } catch (e) { $('#ssBox').innerHTML = '<span class="muted">' + esc(e.message) + '</span>'; }
+}
+
+/* ---- 功能开关 ---- */
+async function loadOptions() {
+  try {
+    const d = await api('/api/options');
+    $('#optBox').innerHTML = d.options.map((o) =>
+      '<div class="opt">' +
+        '<div class="optx"><div class="optl">' + esc(o.label) +
+          ' <span class="muted" style="font-weight:400;font-size:12px">' + esc(o.key) + '</span></div>' +
+          '<div class="optd">' + esc(o.desc) +
+          (o.isDefault ? ' <span class="muted">（当前取默认值，配置文件里未显式写入）</span>' : '') + '</div></div>' +
+        '<label class="sw"><input type="checkbox" data-key="' + esc(o.key) + '"' + (o.value ? ' checked' : '') + '><span></span></label>' +
+      '</div>'
+    ).join('');
+    $('#optBox').querySelectorAll('input[type=checkbox]').forEach((cb) => {
+      cb.onchange = async () => {
+        cb.disabled = true;
+        try {
+          const r = await api('/api/options', { method: 'POST', body: { key: cb.dataset.key, value: cb.checked } });
+          toast('已' + (cb.checked ? '开启' : '关闭') + ' ' + cb.dataset.key + (r.changed ? '（已热重载 ocserv）' : '（本来就如此）'), 'ok');
+          loadOverview();
+        } catch (e) { cb.checked = !cb.checked; toast(e.message, 'err'); }
+        cb.disabled = false;
+      };
+    });
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+let logTimer = null;
+async function loadLogs() {
+  try {
+    const n = parseInt($('#lines').value, 10) || 200;
+    const d = await api('/api/logs?lines=' + n);
+    $('#logBox').textContent = d.lines || '(空)';
+    $('#logBox').scrollTop = $('#logBox').scrollHeight;
+  } catch (e) { $('#logBox').textContent = e.message; }
+}
+$('#autoLog').onchange = () => {
+  if (logTimer) { clearInterval(logTimer); logTimer = null; }
+  if ($('#autoLog').checked) logTimer = setInterval(loadLogs, 5000);
+};
+
+async function loadConfig() {
+  try {
+    const d = await api('/api/config');
+    $('#cfg').value = d.content;
+    $('#cfgMeta').textContent = d.path + ' · ' + fmtBytes(d.info ? d.info.size : 0) + ' · 修改于 ' + (d.info ? new Date(d.info.mtime).toLocaleString() : '-');
+  } catch (e) { toast(e.message, 'err'); }
+}
+$('#saveCfg').onclick = async () => {
+  if (!confirm('保存并重载 ocserv 配置？')) return;
+  try {
+    const r = await api('/api/config', { method: 'POST', body: { content: $('#cfg').value } });
+    toast('已保存并重载\n备份: ' + r.backup, 'ok'); loadOverview();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
+async function loadCert() {
+  try {
+    const d = await api('/api/cert');
+    const c = d.cert;
+    $('#renBox').textContent = d.log || '(暂无日志)';
+    const rows = [
+      ['状态', c.exists ? '<span class="tag ok">已安装</span>' : '<span class="tag err">缺失</span>'],
+      ['域名', esc(c.subject)],
+      ['签发者', esc(c.issuer)],
+      ['SAN', esc((c.san || []).join(', '))],
+      ['生效', esc(c.notBefore)],
+      ['到期', esc(c.notAfter) + (c.daysLeft !== undefined ? ' <span class="tag ' + (c.daysLeft < 15 ? 'err' : (c.daysLeft < 30 ? 'warn' : 'ok')) + '">剩余 ' + c.daysLeft + ' 天</span>' : '')],
+      ['下次续期', esc(c.nextRenew || '(由 ARI 决定)')],
+      ['续期后重载', c.reloadCmd ? '<span class="tag ok">已登记</span>' : '<span class="tag err">未登记</span>'],
+      ['文件', (c.files || []).map((f) => esc(f.path) + ' <span class="muted">' + fmtBytes(f.size) + '</span>').join('<br>')]
+    ];
+    $('#ctBox').innerHTML = '<table><tbody>' + rows.map((r) => '<tr><th style="width:130px">' + r[0] + '</th><td>' + r[1] + '</td></tr>').join('') + '</tbody></table>';
+  } catch (e) { toast(e.message, 'err'); }
+}
+$('#renewCheck').onclick = async () => {
+  const btn = $('#renewCheck'); btn.disabled = true; btn.textContent = '检查中…';
+  try { const r = await api('/api/renew', { method: 'POST', body: { force: false } }); toast('检查完成', 'ok'); $('#renBox').textContent = r.out; }
+  catch (e) { toast(e.message, 'err'); }
+  btn.disabled = false; btn.textContent = '检查续期';
+};
+$('#renewForce').onclick = async () => {
+  if (!confirm('强制重新签发证书？(会向 CA 发起请求)')) return;
+  const btn = $('#renewForce'); btn.disabled = true; btn.textContent = '续期中…';
+  try { const r = await api('/api/renew', { method: 'POST', body: { force: true } }); toast('续期完成', 'ok'); $('#renBox').textContent = r.out; loadCert(); }
+  catch (e) { toast(e.message, 'err'); }
+  btn.disabled = false; btn.textContent = '强制续期';
+};
+
+/* ---- 配置向导 ---- */
+let wzSetup = null, wzFilled = false;
+
+// 与 api() 的区别: 不把 4xx 当异常，方便拿到向导的失败日志
+async function apiRaw(path, opts) {
+  opts = opts || {};
+  const init = { method: opts.method || 'GET', headers: { 'x-panel': '1' }, credentials: 'same-origin' };
+  if (opts.body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+  const r = await fetch(path, init);
+  if (r.status === 401) { showLogin(); throw new Error('未登录'); }
+  let j = null; try { j = await r.json(); } catch (e) {}
+  return { status: r.status, body: j || {} };
+}
+function showLog(sel, text) {
+  const el = $(sel);
+  if (!el) return;
+  el.textContent = text || '(无输出)';
+  el.classList.remove('hide');
+}
+async function checkInit() {
+  try {
+    const s = await api('/api/setup');
+    wzSetup = s;
+    $('#ovBanner').innerHTML = s.initialized ? '' :
+      '<div class="box" style="margin-top:0">' +
+      '<h2>尚未初始化</h2>' +
+      '<div class="muted" style="margin-bottom:10px">安装脚本只装好了程序，还没配域名 / 证书 / VPN。到「配置向导」四步就能上线。</div>' +
+      '<button class="btn" onclick="switchView(\'wz\')">去配置向导</button></div>';
+    return s;
+  } catch (e) { return null; }
+}
+function wzMode() { const r = document.querySelector('input[name=wzmode]:checked'); return r ? r.value : 'dns'; }
+function wzSyncMode() {
+  const m = wzMode();
+  $('#wzDns').classList.toggle('hide', m !== 'dns');
+  $('#wzUpload').classList.toggle('hide', m !== 'upload');
+}
+function wzRenderProv() {
+  if (!wzSetup) return;
+  const list = wzSetup.providers || [];
+  const prov = list.filter((p) => p.id === $('#wzProv').value)[0] || { fields: [] };
+  $('#wzFields').innerHTML = (prov.fields || []).map((f) =>
+    '<div class="row" style="margin-bottom:6px"><label class="muted" style="width:110px">' + esc(f.label) + '</label>' +
+    '<input data-cred="' + esc(f.k) + '" placeholder="' + esc(f.k) + '" style="width:320px"></div>').join('');
+}
+function wzRenderState() {
+  if (!wzSetup) { $('#wzState').textContent = '加载中…'; return; }
+  const s = wzSetup, svc = s.service || {}, c = s.cert || {};
+  const tag = (ok, t) => '<span class="tag ' + (ok ? 'ok' : 'err') + '">' + esc(t) + '</span>';
+  $('#wzState').innerHTML = '<h2>当前状态</h2><table><tbody>' +
+    '<tr><th style="width:150px">初始化</th><td>' + (s.initialized ? tag(true, '已完成') : '<span class="tag warn">未完成</span>') + '</td></tr>' +
+    '<tr><th>ocserv 服务</th><td>' + tag(svc.active === 'active', svc.active || '-') + ' <span class="muted">' + esc(svc.version || '') + ' · enabled=' + esc(svc.enabled || '-') + '</span></td></tr>' +
+    '<tr><th>ocserv.conf</th><td>' + tag(s.hasConf, s.hasConf ? '已生成' : '尚未生成') + '</td></tr>' +
+    '<tr><th>证书</th><td>' + tag(c.exists, c.exists ? ((c.subject || '') + ' · 剩余 ' + (c.daysLeft === undefined ? '-' : c.daysLeft) + ' 天') : '尚未安装') + '</td></tr>' +
+    '<tr><th>NAT 转发单元</th><td>' + tag(s.hasNAT, s.hasNAT ? '已安装' : '尚未安装') + '</td></tr>' +
+    '<tr><th>acme.sh</th><td>' + tag(s.acmeInstalled, s.acmeInstalled ? '已安装' : '尚未安装（第 2 步会自动下载）') + '</td></tr>' +
+    '<tr><th>配置模板</th><td>' + tag(s.templates && s.templates.ok, (s.templates && s.templates.ok) ? '就绪' : ('缺失 ' + ((s.templates || {}).dir || ''))) + '</td></tr>' +
+    '<tr><th>出口网卡</th><td>' + esc(s.outIf || '-') + '</td></tr>' +
+    '<tr><th>面板</th><td>' + esc(((s.panel || {}).host || '') + ':' + ((s.panel || {}).port || '')) + '</td></tr>' +
+    '</tbody></table>' +
+    (s.initialized ? '<div class="muted" style="margin-top:10px">已初始化。重新执行第 4 步会覆盖 ocserv.conf（覆盖前自动备份）并重启 ocserv。</div>' : '');
+}
+function genPass() {
+  const a = new Uint8Array(12); crypto.getRandomValues(a);
+  const cs = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let s = ''; a.forEach((x) => { s += cs[x % cs.length]; });
+  return s;
+}
+async function loadWizard() {
+  const s = await checkInit();
+  if (!s) return;
+  if (!wzFilled) {
+    const p = s.presets || {};
+    $('#wzPort').value = p.vpnPort || 443;
+    $('#wzNet').value = p.vpnNet || '10.66.66.0';
+    $('#wzMask').value = p.vpnMask || '255.255.255.0';
+    $('#wzDns1').value = p.dns1 || '1.1.1.1';
+    $('#wzDns2').value = p.dns2 || '8.8.8.8';
+    $('#wzSleep').value = p.dnssleep || 30;
+    $('#wzOutIf').value = s.outIf || 'eth0';
+    $('#wzProv').innerHTML = (s.providers || []).map((x) => '<option value="' + esc(x.id) + '">' + esc(x.name) + '</option>').join('');
+    wzFilled = true;
+  }
+  if (!$('#wzDomain').value) {
+    const d = (s.cert && s.cert.san && s.cert.san[0]) || (location.hostname.indexOf('.') > 0 ? location.hostname : '');
+    $('#wzDomain').value = d;
+  }
+  wzRenderProv();
+  wzSyncMode();
+  wzRenderState();
+}
+document.querySelectorAll('input[name=wzmode]').forEach((r) => { r.onchange = wzSyncMode; });
+$('#wzProv').onchange = wzRenderProv;
+$('#wzRand').onclick = () => { $('#wzPass').value = genPass(); };
+$('#wzCertBtn').onclick = async () => {
+  const m = wzMode();
+  const body = { mode: m, domain: $('#wzDomain').value.trim(), email: $('#wzEmail').value.trim(), dnssleep: parseInt($('#wzSleep').value, 10) || 30 };
+  if (m === 'dns') {
+    body.provider = $('#wzProv').value;
+    body.creds = {};
+    document.querySelectorAll('#wzFields input[data-cred]').forEach((i) => { body.creds[i.dataset.cred] = i.value.trim(); });
+    body.extra = $('#wzExtra').value.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
+  } else if (m === 'upload') { body.cert = $('#wzCertPem').value; body.key = $('#wzKeyPem').value; }
+  if (!body.domain) return toast('先填域名', 'warn');
+  const b = $('#wzCertBtn'); b.disabled = true; b.textContent = '执行中…（可能要 1~2 分钟）';
+  try {
+    const r = await apiRaw('/api/setup/cert', { method: 'POST', body });
+    showLog('#wzCertLog', r.body.log);
+    toast(r.body.ok ? '证书就绪' : '未通过，看日志', r.body.ok ? 'ok' : 'err');
+    wzSetup = r.body.status || wzSetup; wzRenderState();
+  } catch (e) { toast(e.message, 'err'); }
+  b.disabled = false; b.textContent = '签发 / 安装证书';
+};
+$('#wzApplyBtn').onclick = async () => {
+  if (!confirm('开始部署？会写入 ocserv.conf 并启动 ocserv（原有配置会先备份）')) return;
+  const body = {
+    domain: $('#wzDomain').value.trim(),
+    vpnPort: parseInt($('#wzPort').value, 10) || 443,
+    vpnNet: $('#wzNet').value.trim(), vpnMask: $('#wzMask').value.trim(),
+    dns1: $('#wzDns1').value.trim(), dns2: $('#wzDns2').value.trim(),
+    outIf: $('#wzOutIf').value.trim(),
+    users: [{ name: $('#wzUser').value.trim(), password: $('#wzPass').value }]
+  };
+  const b = $('#wzApplyBtn'); b.disabled = true; b.textContent = '执行中…';
+  try {
+    const r = await apiRaw('/api/setup/apply', { method: 'POST', body });
+    showLog('#wzLog', r.body.log);
+    toast(r.body.ok ? '部署完成' : '未通过，看日志', r.body.ok ? 'ok' : 'err');
+    wzSetup = r.body.status || wzSetup; wzRenderState(); checkInit(); loadOverview();
+  } catch (e) { toast(e.message, 'err'); }
+  b.disabled = false; b.textContent = '开始部署';
+};
+
+/* ---- 面板设置 ---- */
+async function loadPanel() {
+  try {
+    const d = await api('/api/panel');
+    $('#pnPort').textContent = d.port;
+    $('#pnHost').textContent = '监听 ' + d.host + (d.https ? ' · HTTPS' : ' · HTTP');
+    $('#pnUser').textContent = '账号 ' + (d.users || []).join(' / ');
+    $('#pnCfgPath').textContent = d.configFile || 'config.json';
+    $('#pnNewPort').value = '';
+    $('#pnPass').value = '';
+  } catch (e) { toast(e.message, 'err'); }
+}
+$('#pwSave').onclick = async () => {
+  const o = $('#pwOld').value, n = $('#pwNew').value, n2 = $('#pwNew2').value;
+  if (!o) return toast('请先填当前密码', 'warn');
+  if (!n) return toast('请填新密码', 'warn');
+  if (n.length < 6) return toast('新密码至少 6 位', 'warn');
+  if (n !== n2) return toast('两次输入的新密码不一致', 'warn');
+  const b = $('#pwSave'); b.disabled = true; b.textContent = '保存中…';
+  try {
+    await api('/api/panel/password', { method: 'POST', body: { oldPassword: o, newPassword: n } });
+    $('#pwOld').value = ''; $('#pwNew').value = ''; $('#pwNew2').value = '';
+    toast('管理员密码已更新', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+  b.disabled = false; b.textContent = '保存新密码';
+};
+$('#pnSave').onclick = async () => {
+  const port = parseInt($('#pnNewPort').value, 10);
+  const pw = $('#pnPass').value;
+  if (!port || port < 1 || port > 65535) return toast('端口必须是 1~65535 的整数', 'warn');
+  if (!pw) return toast('请先填当前密码', 'warn');
+  if (!confirm('确认把面板端口改成 ' + port + '？\n保存后面板会立即重启，当前登录失效，需用新地址重新登录。')) return;
+  const b = $('#pnSave'); b.disabled = true; b.textContent = '保存中…';
+  try {
+    const r = await api('/api/panel/port', { method: 'POST', body: { port, password: pw } });
+    const nu = location.protocol + '//' + location.hostname + ':' + r.port + '/';
+    $('#pnMsg').innerHTML = '已改为 ' + r.port + ' 端口，面板正在重启… 稍后用 <a href="' + esc(nu) + '">' + esc(nu) + '</a> 访问；若打不开，看服务器上 journalctl -u ocserv-panel。';
+    toast('端口已改为 ' + r.port + '，面板重启中', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+  b.disabled = false; b.textContent = '保存并重启面板';
+};
+
+/* ---- 主题 ---- */
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('ocsp-theme', t); } catch (e) {}
+  const b = $('#themeBtn');
+  if (b) b.textContent = t === 'dark' ? '日间模式' : '夜间模式';
+}
+(function initTheme() {
+  applyTheme(document.documentElement.dataset.theme || 'light');
+  $('#themeBtn').onclick = () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+})();
+
+(async () => {
+  try {
+    const m = await api('/api/meta');
+    if (m && m.title) { document.title = m.title; $('#ptitle').textContent = m.title; $('#ltitle').textContent = m.title; }
+  } catch (e) {}
+  try {
+    const r = await api('/api/me');
+    showApp(r.user); loadOverview();
+  } catch (e) { showLogin(); }
+})();
+</script>
+</body>
+</html>
