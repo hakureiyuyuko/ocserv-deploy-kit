@@ -123,12 +123,75 @@ DNS-01 内置 Cloudflare、阿里云、DNSPod、GoDaddy、DigitalOcean，其它�
   DTLS 不通不影响使用（客户端自动降级到 TCP），只是性能差一些。
 - 云服务器安全组需放行 VPN 端口（**TCP + UDP**）。
 - 在面板「面板设置」里改过面板端口后，记得同步改路由器/安全组的端口映射，并用新地址访问。
+- 面板默认监听 `0.0.0.0` 且默认是**明文 HTTP**（单密码登录）。对 Homelab 而言，
+  “把 19999 也顺手映射到公网”比“VPN 软件本身有漏洞”风险高得多 —— 面板能改配置、建用户、启停服务。
+  只让内网/隧道访问。
+
+---
+
+## ocserv 版本与安全更新（请自行权衡）
+
+**本套件不负责升级 ocserv**：安装脚本只做 `apt-get install ocserv`，之后完全交给系统包管理，
+套件不会自动升级、也不会替换 `/usr/sbin/ocserv`。下面是做决定所需的全部事实。
+
+### 各系统能拿到的版本
+
+| 系统 | 仓库里的 ocserv |
+|---|---|
+| Ubuntu 24.04 LTS | **1.2.4** |
+| Ubuntu 25.04 / Debian 13 (trixie) | 1.3.0 |
+| Debian sid | 1.5.0 |
+| 上游 [gitlab.com/openconnect/ocserv](https://gitlab.com/openconnect/ocserv) | **1.5.0**（2026-06） |
+
+发行版**只在有 CVE / 安全公告时**才发 `-security` 更新。实测：Ubuntu 24.04 的 ocserv
+没有 `-security` 更新，也没有对应 CVE —— 所以下面那些修复**不会**通过 `apt upgrade` 到达 24.04。
+
+### 上游 1.5.0 里的两项 `[SECURITY]`
+
+1. **未认证**可达：worker 进程堆溢出（超长 `webvpncontext=` cookie）。1.2.4 的同名代码
+   确实缺少长度校验（源码级确认），保守按“受影响”看待。
+2. **需要已认证客户端**才能触发：DTLS MTU 协商的无符号下溢（能触发的人已经有账号了，对普通部署基本无威胁）。
+
+两项都**没有 CVE 编号**，也没有公开 PoC / 在野利用报告 —— 所以扫描器和漏洞库不会主动提示你。
+
+### 后果与现成缓解
+
+- 最可能的实际后果：**打崩 worker → 连接中断**（反复打 = VPN 不可用）；再往上是 worker
+  被占（身份是**非特权** `ocserv` 用户，不是 root）。
+- 默认配置已经开着 `isolate-workers = true`，worker 也以非特权用户运行并带 seccomp：
+  每个连接一个短命非特权进程，把最坏后果压在“worker 级”。
+
+### 怎么权衡
+
+| 你的部署 | 建议 |
+|---|---|
+| VPN 端口只在**内网/隧道**暴露 | 跟着系统走就够了：定期 `sudo apt-get update && sudo apt-get install --only-upgrade ocserv`（只升这一个包，不要用 `apt upgrade`；在 24.04 上这条命令拿到的最新也就是 1.2.4） |
+| 端口**直接对公网开**（回家主力通道） | 按“值得处理”看待：至少**限制来源 IP** / 用非标端口减少被扫；想彻底就上 1.5.x（见下） |
+
+### 想用 1.5.x 的三条路
+
+1. **等发行版**：最省心，但要等新 LTS（Debian sid 已是 1.5.0）。
+2. **自编译上游**（适配的人）：1.5.0 已从 autotools 换成 **meson**，网上老教程的 `./configure`
+   不适用 —— 依赖清单与构建步骤以源码包里的 `README.md` / `INSTALL` 为准，默认装到 `/usr/local`，
+   不会覆盖发行版的 `/usr/sbin/ocserv`。
+   - ⚠️ **注意**：面板 `config.json` 里的 `ocservBin` **只影响面板自己读版本 / 跑 `--test-config`，
+     不会改变 systemd 实际启动哪个二进制**。要让服务真的跑新版，得用 systemd
+     drop-in 覆盖 `ExecStart`（先 `systemctl cat ocserv` 照抄参数，再 `systemctl edit ocserv`
+     改成 `/usr/local/sbin/ocserv ...`），否则就只是“面板显示新版本、实际还是旧的”。
+3. **只打最小补丁**：在 1.2.4 源码里把那处 cookie 解析照 1.5.0 的写法改（长度窗口校验 +
+   先解码到 `ws->buffer` 再 `memcpy` 到 `ws->sid`，连同 1.5.0 里那句 `sizeof(ws->buffer)` 断言一起照抄），
+   然后重编包。改动最小，不脱离发行版管理。
+
+> 无论走哪条路，都建议先备份 `/etc/ocserv/ocserv.conf`，并知道怎么回到发行版二进制：
+> `apt-mark unhold ocserv && apt install --reinstall ocserv`。
 
 ---
 
 ## 排查
 
 - 面板 → 日志页看 `journalctl -u ocserv`；证书页看续期日志 `/var/log/acme-renew.log`。
+- **ocserv 版本 / 安全更新值不值得处理** —— 见上文「ocserv 版本与安全更新（请自行权衡）」；
+  日志里若反复出现 worker 崩溃/重启，说明有人在试或本身有其它问题。
 - **不装客户端也能自检服务端**（最后一步返回 `<auth id="success">` 即正常）：
 
 ```bash
@@ -190,6 +253,8 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
   供脚本调用）。同时修掉「重跑安装脚本会把向导写的域名/证书路径/网段/标题覆盖回默认值」的 bug：
   升级时只有**显式传入**的参数才覆盖，其余全沿用；`ocserv-panel/install.sh` 也不再依赖当前工作目录。
   另外仓库增加 **GitHub Pages 在线演示**（`docs/` + `tools/make-demo.mjs`），不进安装包。
+  文档补充：「ocserv 版本与安全更新（请自行权衡）」一节（各发行版版本、上游 1.5.0 的两项安全修复、
+  后果与缓解、三条升级路径）与面板暴露提醒。
   另外把上游 acme.sh 的许可证全文补进 `acme/LICENSE.md`。
 - **1.4.0** —— 面板新增**「面板设置」页**：改管理员密码（立即生效）、改面板监听端口（改完自动重启面板；
   改密码/端口都需输入当前密码，端口会先试监听，占用则不落盘）。安装脚本本身不变。
