@@ -224,24 +224,15 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
 
 ---
 
-## 许可
+## 许可与第三方
 
-- `acme/acme.sh` 是上游 [acmesh-official/acme.sh](https://github.com/acmesh-official/acme.sh)
-  的**原样拷贝（未做任何修改）**，版本 `3.1.5`，采用 **GNU GPL v3**，许可证全文见 `acme/LICENSE.md`。
+- **本套件**（安装 / 更新 / 卸载脚本、管理面板及其前端、`docs/` 演示页与 `tools/` 生成器）以
+  **GNU AGPL-3.0-or-later** 发布，全文见 [`LICENSE`](LICENSE)。
+  注意 AGPL 第 13 条：如果你**修改**了本面板并作为网络服务对外提供，需要向使用者提供对应源码。
+- **`acme/acme.sh`** 是上游 [acmesh-official/acme.sh](https://github.com/acmesh-official/acme.sh) 的
+  原样拷贝（未做任何修改），版本 `3.1.5`，采用 **GNU GPL-3.0**，许可证全文见 [`acme/LICENSE.md`](acme/LICENSE.md)。
   校验值：`sha256 B81542B4A05EFA88638C727FF7185A44D996A3840C0E7D15B2200B8628301B51`。
-- 其余脚本与 `ocserv-panel/` 为本项目原创代码。面板是以**独立进程**调用 `acme.sh` 的
-  （exec，不链接、不修改），所以上游的 copyleft 不影响这些文件。
-
----
-
-## 授权与第三方
-
-- 本套件（安装 / 更新 / 卸载脚本、管理面板及其前端）以 **GNU AGPL-3.0-or-later** 发布，
-  全文见 [`LICENSE`](LICENSE)。注意 AGPL 第 13 条：如果你**修改**了本面板并作为网络服务对外提供，
-  需要向使用者提供对应源码。
-- `acme/acme.sh` 是 [acmesh-official/acme.sh](https://github.com/acmesh-official/acme.sh) 的
-  上游原版（未做任何修改），按它自己的 **GNU GPL-3.0** 分发，全文见 [`acme/LICENSE.md`](acme/LICENSE.md)。
-  两者属聚合分发（各自独立程序），各自保留自己的许可证。
+  面板是以**独立进程**调用它的（exec，不链接、不修改），两者属聚合分发，各自保留自己的许可证。
 - 打包不含任何证书、密钥、口令或 API 凭据；这些都在部署时由你本机生成。
 
 ---
