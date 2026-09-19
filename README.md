@@ -5,6 +5,9 @@
 
 支持 Ubuntu / Debian（systemd）。
 
+> **先看效果**：面板有[在线演示](https://hakureiyuyuko.github.io/ocserv-deploy-kit/)
+> （GitHub Pages，纯前端 mock，无需安装，数据全是虚构示例）。
+
 ---
 
 ## 快速开始
@@ -66,6 +69,8 @@ uninstall.sh        卸载（默认保留配置与证书，--purge 才清干净�
 ocserv-panel/       管理面板（Node >= 18，零第三方依赖）
 acme/               acme.sh 客户端 + 签发/续期脚本（单独使用时用）
 ocserv/             ocserv.conf 模板与 NAT 单元样板
+docs/               面板在线演示页（GitHub Pages 用，安装时不需要）
+tools/              演示页生成器（node tools/make-demo.mjs）
 ```
 
 ---
@@ -91,6 +96,20 @@ DNS-01 内置 Cloudflare、阿里云、DNSPod、GoDaddy、DigitalOcean，其它�
 证书（详情 / 下次续期 / 手动续期 / 续期日志）、面板设置（改面板管理员密码 / 面板端口）。
 
 详见 `ocserv-panel/README.md`。
+
+---
+
+## 在线演示（GitHub Pages）
+
+`docs/` 是一个**纯静态**的面板演示页：把真实前端拿来，前面插一层本地 mock 接口
+（`tools/demo-mock.js`），所以点任何按钮都不会碰到服务器，数据全是虚构示例；
+域名填错、缺 DNS 凭据、端口被占用、密码错误这些**错误路径也照真实后端的行为还原**。
+
+- 在线地址：https://hakureiyuyuko.github.io/ocserv-deploy-kit/
+- 自己重新生成（改了面板后同步演示）：`node tools/make-demo.mjs`
+- 部署：仓库 Settings → Pages → Source 选 `Deploy from a branch`，分支 `main`、目录 `/docs`
+
+生产环境安装**不需要** `docs/` 与 `tools/`，发布包（`ocserv-deploy-kit-*.tar.gz`）里也不包含它们。
 
 ---
 
@@ -170,6 +189,7 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
   用户/续期任务）与套件级 `uninstall.sh`（默认保留配置与证书，`--purge` 连数据一起清，`--yes`
   供脚本调用）。同时修掉「重跑安装脚本会把向导写的域名/证书路径/网段/标题覆盖回默认值」的 bug：
   升级时只有**显式传入**的参数才覆盖，其余全沿用；`ocserv-panel/install.sh` 也不再依赖当前工作目录。
+  另外仓库增加 **GitHub Pages 在线演示**（`docs/` + `tools/make-demo.mjs`），不进安装包。
   另外把上游 acme.sh 的许可证全文补进 `acme/LICENSE.md`。
 - **1.4.0** —— 面板新增**「面板设置」页**：改管理员密码（立即生效）、改面板监听端口（改完自动重启面板；
   改密码/端口都需输入当前密码，端口会先试监听，占用则不落盘）。安装脚本本身不变。

@@ -1,3 +1,4 @@
+# 运行态 / 含密钥的文件，绝不入库
 config.json
 config.json.bak*
 admin-cred.txt
@@ -9,6 +10,8 @@ admin-cred.txt
 *.crt
 *.env
 acme-dns.env
+
+# 打包产物与临时文件
 *.tar.gz
 *.zip
 *.tmp

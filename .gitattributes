@@ -1,0 +1,3 @@
+# 全部按 LF 存储/检出：这些脚本和数据都是给 Linux 用的，
+# 避免在 Windows 上 clone 出 CRLF 导致 .sh 无法执行
+* text=auto eol=lf
