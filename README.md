@@ -190,6 +190,9 @@ DNS-01 内置 Cloudflare、阿里云、DNSPod、GoDaddy、DigitalOcean，其它�
 ## 排查
 
 - 面板 → 日志页看 `journalctl -u ocserv`；证书页看续期日志 `/var/log/acme-renew.log`。
+- **忘了面板管理员密码** → 先 `sudo cat /opt/ocserv-panel/admin-cred.txt`（安装与改密码时都会同步写这里）；
+  要重置就按 `ocserv-panel/README.md` 的「忘了管理员密码怎么办」用 root 改。面板没有网页找回入口（故意的），
+  也**不要**拿根目录的 `install.sh` 去重置 —— 它会把 ocserv 停掉。
 - **ocserv 版本 / 安全更新值不值得处理** —— 见上文「ocserv 版本与安全更新（请自行权衡）」；
   日志里若反复出现 worker 崩溃/重启，说明有人在试或本身有其它问题。
 - **不装客户端也能自检服务端**（最后一步返回 `<auth id="success">` 即正常）：

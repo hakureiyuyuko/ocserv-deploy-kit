@@ -120,9 +120,42 @@ systemctl restart ocserv-panel
 # 命令行兜底：改监听地址/HTTPS 开关等只能编辑 config.json 后重启
 vi /opt/ocserv-panel/config.json && systemctl restart ocserv-panel
 
+# 忘了管理员密码 -> 见下方「忘了管理员密码怎么办」
+
 # 卸载
 sudo ./uninstall.sh
 ```
+
+### 忘了管理员密码怎么办
+
+面板**故意没有**“网页上重置密码”的入口 —— 那等于任何能访问面板端口的人都能接管管理员账号，
+信任锚点必须是那台机器的 root。所以恢复只有一条主线：**SSH 上去，用 root 重置**。
+
+```bash
+# 1) 先看一眼：安装 / 面板改密码 / CLI 改密码，都会把当前密码同步写到这个文件（权限 600）
+sudo cat /opt/ocserv-panel/admin-cred.txt
+
+# 2) 确定要重置（不用停服务）
+sudo node /opt/ocserv-panel/server.js --set-password admin '新密码'
+sudo systemctl restart ocserv-panel          # 必须重启：面板只在启动时读 config.json
+
+# 3) node 不在 root 的 PATH 里（nvm/snap 装的）时，用 systemd 单元里记的绝对路径
+NODEBIN=$(systemctl show ocserv-panel -p ExecStart --value | sed 's/.*path=\([^ ]*\).*/\1/')
+sudo "$NODEBIN" /opt/ocserv-panel/server.js --set-password admin '新密码'
+sudo systemctl restart ocserv-panel
+```
+
+- 装到别的目录：`systemctl show ocserv-panel -p WorkingDirectory --value`
+- 想顺便升级面板：`cd ocserv-panel && sudo ./install.sh --reset-password --admin-password '新密码'`
+- **不要**拿套件根目录的 `install.sh` 做这件事：它是首次安装入口，会 `apt-get` 装依赖并
+  `systemctl disable --now ocserv`，**把正在用的 VPN 停掉**。
+- `--set-password` 给的用户名如果不存在，会**新建一个登录账号** —— 别敲错用户名。
+- 用户名忘了：面板只有一个内置账号 `admin`（`config.json` 的 `users` 里能看到全部）。
+- 完全没有 SSH/root 权限：只能重装 —— 这正是“不提供网页重置”的代价，也是它的目的。
+- `admin-cred.txt` 存的是**明文**密码，保持 600；不想留就 `sudo rm` 掉（以后再改密码会重新生成）。
+
+> 注意：面板**正在运行时**用命令行改了密码，必须 `systemctl restart ocserv-panel` 才生效；
+> 在网页「面板设置」里改则立即生效。
 
 ## 配置项（`<prefix>/config.json`）
 
@@ -156,6 +189,7 @@ sudo ./uninstall.sh
 - 登录失败 5 次锁定该 IP 10 分钟
 - 无未授权接口（除 `/api/meta` 只返回标题版本号）
 - 改密码 / 改端口都需**重新输入当前密码**（防会话被劫持后直接接管），新密码至少 6 位且不得与旧密码相同
+- 忘记密码**只能在那台机器上（root）重置**：面板没有任何“网页找回”入口，否则任何能访问端口的人都能接管
 - 绑定内网/隧道地址时公网无监听，无需动云安全组
 
 > 提示：明文 HTTP 下的登录密码靠传输层（WireGuard/内网）保护。如果面板要暴露到公网，
@@ -223,6 +257,8 @@ sed -i -e 's/@DOMAIN@/你的域名/' -e 's/@OCSERV_SERVICE@/ocserv/' -e 's/@PANE
   （写盘前先探测端口能否监听，改完自动重启面板，不依赖 systemd 的 Restart=always 的部署也能自行拉起）；
   接口 `GET /api/panel`、`POST /api/panel/password`、`POST /api/panel/port`。
   顺带修：`admin-cred.txt` 里“改密码”提示补上“面板运行时需 restart 才生效”，`--set-password` 同样提示。
+  文档补充：新增「忘了管理员密码怎么办」标准流程（读 `admin-cred.txt` / CLI 重置 + 重启 / 重跑安装脚本，
+  以及“别用套件根 install.sh”与“没有网页重置入口”的原因）。
 - **1.3.1** —— 面向对外发布整理：移除内部排障记录与示例里的真实 IP/域名，精简输出与文档。
 - **1.3.0** —— 新增**配置向导**（域名 / 证书 / VPN 参数 / 第一个用户 / NAT 单元 / 续期 / 启动 ocserv 都在面板里完成）；
   安装与其分离：`install.sh` 新增 `--admin-password`，并安装 `lib/` 与 `templates/`；
