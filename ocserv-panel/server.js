@@ -29,7 +29,7 @@ const BASE       = __dirname;
 const CONF_FILE  = path.join(BASE, 'config.json');
 const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
-const VERSION    = '1.5.0';
+const VERSION    = '1.6.0';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -272,6 +272,96 @@ function readOptions() {
     const value = m ? /^(true|yes|1)$/i.test(m[1]) : meta.def;
     return { key, label: meta.label, desc: meta.desc, value, present, isDefault: !present };
   });
+}
+
+/* ---- 认证方式（本地密码文件 / PAM）---- */
+// ocserv 不允许同时配置多个密码类认证方法（同时配会直接拒绝启动），
+// 所以"切换"= 替换那一行，而不是叠加。certificate / enable-auth 等非密码类保持原样。
+const PASSWORD_AUTH_METHODS = ['plain', 'pam', 'radius', 'gssapi', 'oidc'];
+
+function parseAuthLine(line) {
+  const m = String(line).match(/^\s*auth\s*=\s*"([^"]*)"/);
+  if (!m) return null;
+  const raw = m[1];
+  const br = raw.indexOf('[');
+  const name = (br >= 0 ? raw.slice(0, br) : raw).trim().toLowerCase();
+  const kv = {};
+  if (br >= 0) {
+    raw.slice(br + 1).replace(/\]\s*$/, '').split(',').forEach((p) => {
+      const i = p.indexOf('=');
+      if (i > 0) kv[p.slice(0, i).trim()] = p.slice(i + 1).trim();
+    });
+  }
+  return { name, kv, raw };
+}
+function authState() {
+  const txt = readText(CFG.ocservConf, '') || '';
+  const list = txt.split('\n').map(parseAuthLine).filter(Boolean);
+  const pw = list.filter((a) => PASSWORD_AUTH_METHODS.indexOf(a.name) >= 0);
+  const cur = pw[0] || list[0] || null;
+  return {
+    method: cur ? cur.name : null,
+    raw: cur ? cur.raw : null,
+    others: list.filter((a) => a !== cur).map((a) => a.name),
+    pam: cur && cur.name === 'pam' ? { service: cur.kv.service || '', gidMin: cur.kv['gid-min'] || '' } : null,
+    methods: list.map((a) => a.name)
+  };
+}
+// 要写进配置的值必须限制字符集：带了 ] 或 " 就能插出新的配置项
+function validPamService(v) { return /^[A-Za-z0-9._@-]{1,64}$/.test(v); }
+function renderAuthLine(method, o) {
+  if (method === 'plain') return 'auth = "plain[passwd=' + CFG.ocpasswd + ']"';
+  const parts = [];
+  if (o.service) parts.push('service=' + o.service);
+  if (o.gidMin) parts.push('gid-min=' + o.gidMin);
+  return 'auth = "pam' + (parts.length ? '[' + parts.join(',') + ']' : '') + '"';
+}
+
+async function setAuthMethod(body) {
+  const method = String(body.method || '');
+  if (method !== 'plain' && method !== 'pam') return { ok: false, error: '不支持的认证方式: ' + method };
+  const txt = readText(CFG.ocservConf, null);
+  if (txt === null) return { ok: false, error: '读不到配置文件 ' + CFG.ocservConf };
+
+  let service = '', gidMin = '';
+  if (method === 'pam') {
+    service = String(body.service || '').trim();
+    gidMin = String(body.gidMin || '').trim();
+    if (service && !validPamService(service)) return { ok: false, error: 'PAM 服务名不合法（只允许字母/数字/._@-，最长 64）' };
+    if (gidMin && !/^\d{1,9}$/.test(gidMin)) return { ok: false, error: 'gid-min 必须是数字' };
+  }
+
+  const newLine = renderAuthLine(method, { service, gidMin });
+  const out = [];
+  let placed = false;
+  for (const l of txt.split('\n')) {
+    const a = parseAuthLine(l);
+    if (a && PASSWORD_AUTH_METHODS.indexOf(a.name) >= 0) {
+      if (!placed) { out.push(newLine); placed = true; }   // 写回原位置，其余密码类 auth 行删掉
+      continue;
+    }
+    out.push(l);
+  }
+  if (!placed) {                                            // 原本没有密码类 auth 行：插在注释头之后
+    let i = 0;
+    while (i < out.length && /^\s*(#|$)/.test(out[i])) i++;
+    out.splice(i, 0, newLine);
+  }
+  const updated = out.join('\n');
+  if (updated === txt) return { ok: true, changed: false, auth: authState() };
+
+  const bak = CFG.ocservConf + '.bak-' + Date.now();
+  try { fs.copyFileSync(CFG.ocservConf, bak); } catch (e) {}
+  fs.writeFileSync(CFG.ocservConf, updated, { mode: 0o644 });
+
+  const t = await run(CFG.ocservBin, ['-c', CFG.ocservConf, '--test-config'], null, 20000);
+  if (t.code !== 0) {
+    try { fs.copyFileSync(bak, CFG.ocservConf); } catch (e) {}
+    return { ok: false, error: '配置校验失败，已回滚：' + ((t.err || t.out) || '').trim() };
+  }
+  // 主进程收到 SIGHUP 会给 sec-mod 发信号，认证配置会重新加载
+  const rl = await run('systemctl', ['reload-or-restart', CFG.ocservService], null, 30000);
+  return { ok: true, changed: true, backup: bak, auth: authState(), out: ((rl.out || '') + (rl.err || '')).trim() };
 }
 
 async function setOption(key, value) {
@@ -790,6 +880,11 @@ async function handle(req, res) {
       });
     }
     if (p === '/api/users' && method === 'GET') return send(res, 200, { users: readUsers() });
+    if (p === '/api/auth' && method === 'GET') return send(res, 200, authState());
+    if (p === '/api/auth' && method === 'POST') {
+      const r = await setAuthMethod(body);
+      return send(res, r.ok ? 200 : 400, r);
+    }
     if (p === '/api/users' && method === 'POST') {
       let r = { ok: false, error: '未知操作' };
       if (body.action === 'add' || body.action === 'passwd') r = await addUser(body.username, String(body.password || ''));

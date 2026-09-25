@@ -31,7 +31,7 @@ ocserv-panel/
 | 概览 | 服务状态/PID/重启次数、监听端口、证书剩余天数、用户数、在线会话数、系统负载与内存 |
 | 服务控制 | 启动 / 重启 / **重载(不断线)** / 停止 |
 | 选项 | **开关式**修改常见布尔选项（AnyConnect 兼容、旧版 DTLS、MTU 发现、DNS 走隧道……），自动备份+校验+回滚 |
-| 用户管理 | 列出、新增、删除、重置密码（直接操作 `ocpasswd`，立即生效，无需重启） |
+| 用户管理 | **认证方式切换**：本地密码文件 / **PAM**（系统认证，可接 sssd/LDAP、winbind/AD），可填 PAM 服务名与 `gid-min`；列出、新增、删除、重置密码（直接操作 `ocpasswd`，立即生效，无需重启） |
 | 在线会话 | `occtl` 会话列表（优先 JSON，自动降级文本解析） |
 | 日志 | `journalctl` 实时查看，支持自动刷新 |
 | 配置 | 在线编辑 `ocserv.conf`：**保存前备份 → `--test-config` 校验 → 失败自动回滚** → 成功才 reload |
@@ -249,6 +249,11 @@ sed -i -e 's/@DOMAIN@/你的域名/' -e 's/@OCSERV_SERVICE@/ocserv/' -e 's/@PANE
 
 ## 更新日志
 
+- **1.6.0** —— 「用户管理」新增**认证方式切换**：本地密码文件（默认）/ **PAM**（系统认证，用于接 sssd/LDAP、
+  winbind/AD），可带 `service=`、`gid-min=`；接口 `GET/POST /api/auth`。
+  实现要点：ocserv **不允许同时配多个密码类认证方法**（源码里直接 exit），所以切换是**替换那一行**而非叠加；
+  写前备份 → `--test-config` → 失败自动回滚 → `reload-or-restart`；`certificate` 等非密码类 auth 行保持不变；
+  写进配置的值限制字符集（服务名不允许 `]`/`"`/空白，防配置注入）。
 - **1.5.0** —— 升级不再丢向导写的配置：重跑 `install.sh` 时只有**显式传入**的参数才覆盖，
   `acmeDomain` / `certFile` / `keyFile` / `vpnNet` / 标题 / 端口 / 监听地址都沿用旧值
   （之前会被恢复成默认值，导致证书页空白、HTTPS 回落 HTTP）。另外脚本不再依赖

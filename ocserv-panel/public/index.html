@@ -134,6 +134,23 @@
 
   <section class="view" id="v-us">
     <div class="box">
+      <h2>认证方式 <span class="muted" id="authCur"></span></h2>
+      <div class="row" style="margin-bottom:8px">
+        <label class="muted"><input type="radio" name="authm" value="plain"> 本地密码文件</label>
+        <label class="muted"><input type="radio" name="authm" value="pam"> PAM（系统认证 / LDAP / AD）</label>
+      </div>
+      <div class="row" id="authPam" style="margin-bottom:8px">
+        <label class="muted" style="width:110px">PAM 服务名</label>
+        <input id="authSvc" placeholder="ocserv" style="width:150px">
+        <label class="muted" style="width:70px;margin-left:16px">gid-min</label>
+        <input id="authGid" placeholder="可选" style="width:90px">
+      </div>
+      <div class="row">
+        <button class="btn" id="authSave">应用</button>
+        <span class="muted" id="authMsg"></span>
+      </div>
+    </div>
+    <div class="box">
       <h2>新增用户 / 重置密码</h2>
       <div class="row">
         <input id="nu" placeholder="用户名" style="width:200px">
@@ -389,7 +406,7 @@ function switchView(v) {
   document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
   document.querySelectorAll('.view').forEach((s) => s.classList.toggle('on', s.id === 'v-' + v));
   if (v === 'ov') loadOverview();
-  if (v === 'us') loadUsers();
+  if (v === 'us') { loadUsers(); loadAuth(); }
   if (v === 'ss') loadSessions();
   if (v === 'op') loadOptions();
   if (v === 'lg') loadLogs();
@@ -487,6 +504,38 @@ async function delUser(name) {
   try { await api('/api/users', { method: 'POST', body: { action: 'del', username: name } }); toast('已删除', 'ok'); loadUsers(); }
   catch (e) { toast(e.message, 'err'); }
 }
+
+/* ---- 认证方式（本地密码文件 / PAM）---- */
+function authPick() { const r = document.querySelector('input[name=authm]:checked'); return r ? r.value : ''; }
+function authSyncPam() {
+  const on = authPick() === 'pam';
+  $('#authPam').querySelectorAll('input').forEach((i) => { i.disabled = !on; });
+  $('#authPam').style.opacity = on ? '1' : '.45';
+}
+async function loadAuth() {
+  try {
+    const d = await api('/api/auth');
+    document.querySelectorAll('input[name=authm]').forEach((r) => { r.checked = (r.value === d.method); });
+    const extras = (d.others || []).filter((x) => x !== 'plain' && x !== 'pam');
+    $('#authCur').textContent = '当前：' + (d.method || '未知') + (extras.length ? ' + ' + extras.join(' + ') : '');
+    if (d.pam) { $('#authSvc').value = d.pam.service || ''; $('#authGid').value = d.pam.gidMin || ''; }
+    $('#authMsg').textContent = '';
+    authSyncPam();
+  } catch (e) { toast(e.message, 'err'); }
+}
+document.querySelectorAll('input[name=authm]').forEach((r) => { r.onchange = authSyncPam; });
+$('#authSave').onclick = async () => {
+  const m = authPick();
+  if (!m) return toast('请先选择认证方式', 'warn');
+  if (m === 'pam' && !confirm('切到 PAM 后本地密码文件里的用户不再能登录（ocserv 不允许多个密码认证并存）。继续？')) return;
+  const b = $('#authSave'); b.disabled = true; b.textContent = '应用中…';
+  try {
+    const r = await api('/api/auth', { method: 'POST', body: { method: m, service: $('#authSvc').value.trim(), gidMin: $('#authGid').value.trim() } });
+    toast('已切换为 ' + ((r.auth && r.auth.method) || m) + (r.changed ? '（已 reload ocserv）' : '（本来就如此）'), 'ok');
+    loadAuth(); loadOverview();
+  } catch (e) { toast(e.message, 'err'); }
+  b.disabled = false; b.textContent = '应用';
+};
 
 async function loadSessions() {
   $('#ssBox').textContent = '加载中…';

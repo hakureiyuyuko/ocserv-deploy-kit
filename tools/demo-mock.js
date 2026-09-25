@@ -125,8 +125,55 @@
     state.svc.active = true; state.svc.sub = 'running';
     return { ok: true, changed: true, backup: CONF_PATH + '.bak-' + Date.now(), out: '（演示：未真的 reload systemctl）', options: readOptions() };
   }
-  function parseListen() {
-    var out = [];
+  /* ocserv 不允许两个密码类认证并存：切换=替换那一行 */
+  var PW_METHODS = ['plain', 'pam', 'radius', 'gssapi', 'oidc'];
+  function parseAuthLineDemo(line) {
+    var m = String(line).match(/^\s*auth\s*=\s*"([^"]*)"/);
+    if (!m) return null;
+    var raw = m[1], br = raw.indexOf('[');
+    var name = (br >= 0 ? raw.slice(0, br) : raw).trim().toLowerCase();
+    var kv = {};
+    if (br >= 0) raw.slice(br + 1).replace(/\]\s*$/, '').split(',').forEach(function (p) {
+      var i = p.indexOf('='); if (i > 0) kv[p.slice(0, i).trim()] = p.slice(i + 1).trim();
+    });
+    return { name: name, kv: kv, raw: raw };
+  }
+  function authStateDemo() {
+    var list = state.conf.split('\n').map(parseAuthLineDemo).filter(Boolean);
+    var pw = list.filter(function (a) { return PW_METHODS.indexOf(a.name) >= 0; });
+    var cur = pw[0] || list[0] || null;
+    return {
+      method: cur ? cur.name : null, raw: cur ? cur.raw : null,
+      others: list.filter(function (a) { return a !== cur; }).map(function (a) { return a.name; }),
+      pam: cur && cur.name === 'pam' ? { service: cur.kv.service || '', gidMin: cur.kv['gid-min'] || '' } : null,
+      methods: list.map(function (a) { return a.name; })
+    };
+  }
+  function setAuthDemo(body) {
+    var m = String(body.method || '');
+    if (m !== 'plain' && m !== 'pam') return { ok: false, error: '不支持的认证方式: ' + m };
+    var svc = String(body.service || '').trim(), gid = String(body.gidMin || '').trim();
+    if (m === 'pam') {
+      if (svc && !/^[A-Za-z0-9._@-]{1,64}$/.test(svc)) return { ok: false, error: 'PAM 服务名不合法（只允许字母/数字/._@-，最长 64）' };
+      if (gid && !/^\d{1,9}$/.test(gid)) return { ok: false, error: 'gid-min 必须是数字' };
+    }
+    var parts = [];
+    if (svc) parts.push('service=' + svc);
+    if (gid) parts.push('gid-min=' + gid);
+    var nl = m === 'plain' ? 'auth = "plain[passwd=/etc/ocserv/ocpasswd]"'
+      : 'auth = "pam' + (parts.length ? '[' + parts.join(',') + ']' : '') + '"';
+    if (m === 'pam' && svc === 'broken') return { ok: false, error: '配置校验失败，已回滚：（演示：拿 broken 演示回滚分支）' };
+    var out = [], done = false;
+    state.conf.split('\n').forEach(function (l) {
+      var a = parseAuthLineDemo(l);
+      if (a && PW_METHODS.indexOf(a.name) >= 0) { if (!done) { out.push(nl); done = true; } return; }
+      out.push(l);
+    });
+    state.conf = out.join('\n');
+    return { ok: true, changed: true, backup: CONF_PATH + '.bak-' + Date.now(), auth: authStateDemo(), out: '（演示：未真的 reload systemctl）' };
+  }
+
+  function parseListen() {    var out = [];
     state.conf.split('\n').forEach(function (l) {
       var m = l.match(/^\s*(tcp-port|udp-port)\s*=\s*(\d+)/);
       if (m) out.push({ proto: m[1].split('-')[0].toUpperCase(), port: Number(m[2]) });
@@ -191,7 +238,7 @@
     panelPw: 'admin',               // 演示口令（可故意输错看拦截）
     panelPort: 19999,
     title: 'ocserv 管理面板（在线演示）',
-    version: '1.5.0-demo',
+    version: '1.6.0-demo',
     svc: { active: true, sub: 'running', pid: '812', restarts: 0 },
     conf: buildConf({ vpnPort: 443, certDir: CERTDIR, domain: DOMAIN }),
     hasConf: true, hasNAT: true, acmeInstalled: true, outIf: 'eth0',
@@ -389,6 +436,13 @@
       }
       if (!state.users.some(function (u) { return u.name === name; })) state.users.push({ name: name });
       return res(200, { ok: true, users: state.users });
+    }
+    if (p === '/api/auth') {
+      if (method === 'POST') {
+        var ra = setAuthDemo(body);
+        return res(ra.ok ? 200 : 400, ra);
+      }
+      return res(200, authStateDemo());
     }
     if (p === '/api/sessions') return res(200, { json: false, list: state.sessions });
 
