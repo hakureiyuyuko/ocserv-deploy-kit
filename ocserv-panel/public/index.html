@@ -537,22 +537,34 @@ $('#authSave').onclick = async () => {
   b.disabled = false; b.textContent = '应用';
 };
 
+/* 在线会话的列：occtl 的 JSON 字段名各版本不一样，按别名单映到固定列 */
+const SESS_COLS = [
+  ['ID', ['id']],
+  ['用户', ['username', 'user']],
+  ['状态', ['state', 'status']],
+  ['设备', ['user agent', 'user-agent', 'device']],
+  ['来源 IP', ['remote ip', 'remote_ip', 'ip']],
+  ['建立时间', ['since', 'created']],
+];
+function sessVal(row, names) {
+  const low = {};
+  Object.keys(row || {}).forEach((k) => { low[String(k).toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()] = row[k]; });
+  for (const n of names) {
+    const v = low[n];
+    if (v !== undefined && v !== null && String(v) !== '') return String(v);
+  }
+  return '-';
+}
 async function loadSessions() {
   $('#ssBox').textContent = '加载中…';
   try {
     const d = await api('/api/sessions');
     if (d.error) { $('#ssBox').innerHTML = '<span class="muted">' + esc(d.error) + '</span>'; return; }
-    if (!d.list.length) { $('#ssBox').innerHTML = '<span class="muted">当前没有在线用户</span>'; return; }
-    if (d.json) {
-      const keys = Object.keys(d.list[0]).slice(0, 8);
-      $('#ssBox').innerHTML = '<table><thead><tr>' + keys.map((k) => '<th>' + esc(k) + '</th>').join('') + '</tr></thead><tbody>' +
-        d.list.map((r) => '<tr>' + keys.map((k) => '<td>' + esc(typeof r[k] === 'object' ? JSON.stringify(r[k]) : r[k]) + '</td>').join('') + '</tr>').join('') +
-        '</tbody></table>';
-    } else {
-      $('#ssBox').innerHTML = '<table><thead><tr><th>ID</th><th>用户</th><th>设备</th><th>来源 IP</th><th>建立时间</th></tr></thead><tbody>' +
-        d.list.map((r) => '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.user) + '</td><td>' + esc(r.device) + '</td><td>' + esc(r.remote_ip) + '</td><td class="muted">' + esc(r.since) + '</td></tr>').join('') +
-        '</tbody></table>';
-    }
+    if (d.raw) { $('#ssBox').innerHTML = '<pre>' + esc(d.raw) + '</pre>'; return; }
+    if (!d.list || !d.list.length) { $('#ssBox').innerHTML = '<span class="muted">当前没有在线用户</span>'; return; }
+    $('#ssBox').innerHTML = '<table><thead><tr>' + SESS_COLS.map((c) => '<th>' + c[0] + '</th>').join('') + '</tr></thead><tbody>'
+      + d.list.map((r) => '<tr>' + SESS_COLS.map((c) => '<td' + (c[0] === '建立时间' ? ' class="muted"' : '') + '>' + esc(sessVal(r, c[1])) + '</td>').join('') + '</tr>').join('')
+      + '</tbody></table>';
   } catch (e) { $('#ssBox').innerHTML = '<span class="muted">' + esc(e.message) + '</span>'; }
 }
 

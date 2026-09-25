@@ -238,14 +238,15 @@
     panelPw: 'admin',               // 演示口令（可故意输错看拦截）
     panelPort: 19999,
     title: 'ocserv 管理面板（在线演示）',
-    version: '1.6.0-demo',
+    version: '1.6.1-demo',
     svc: { active: true, sub: 'running', pid: '812', restarts: 0 },
     conf: buildConf({ vpnPort: 443, certDir: CERTDIR, domain: DOMAIN }),
     hasConf: true, hasNAT: true, acmeInstalled: true, outIf: 'eth0',
     users: [{ name: 'alice' }, { name: 'bob' }, { name: 'carol' }],
+    // 按 occtl -j show users 的真实字段名造数据（前端按别名映射成固定列）
     sessions: [
-      { id: '1418', user: 'alice', device: 'AnyConnect Windows 4.10', remote_ip: '203.0.113.24', since: '2026-09-18 20:41' },
-      { id: '1502', user: 'bob', device: 'OpenConnect v9.12 (Linux)', remote_ip: '198.51.100.77', since: '2026-09-18 21:02' }
+      { ID: 38274, Username: 'alice', Groupname: '(none)', State: 'connected', vhost: 'default', Device: 'vpns0', MTU: 1354, 'Remote IP': '203.0.113.24', 'User-Agent': 'AnyConnect Windows 4.10', since: '2026-09-25 20:41' },
+      { ID: 38281, Username: 'bob', Groupname: '(none)', State: 'connected', vhost: 'default', Device: 'vpns0', MTU: 1400, 'Remote IP': '198.51.100.77', 'User-Agent': 'OpenConnect v9.12', since: '2026-09-25 21:02' }
     ],
     certOk: true
   };
@@ -444,7 +445,7 @@
       }
       return res(200, authStateDemo());
     }
-    if (p === '/api/sessions') return res(200, { json: false, list: state.sessions });
+    if (p === '/api/sessions') return res(200, { json: true, list: state.sessions });
 
     if (p === '/api/service' && method === 'POST') {
       var a = String(body.action || '');

@@ -29,7 +29,7 @@ const BASE       = __dirname;
 const CONF_FILE  = path.join(BASE, 'config.json');
 const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
-const VERSION    = '1.6.0';
+const VERSION    = '1.6.1';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -252,15 +252,11 @@ async function getSessions() {
       return { json: true, list: Array.isArray(parsed) ? parsed : (parsed.users || []) };
     } catch (e) {}
   }
+  // JSON 不可用（老版本 occtl 或异常）：原样把文本交给前端显示，不做易错的列猜测
   const t = await run('occtl', ['show', 'users']);
-  if (t.code !== 0) return { json: false, list: [], error: (t.err || t.out || 'occtl 不可用').trim() };
-  const rows = [];
-  for (const l of (t.out || '').split('\n')) {
-    if (!l.trim() || /^\s*(id|user)\b/i.test(l) || /^-+\s/.test(l)) continue;
-    const cols = l.trim().split(/\s{2,}|\t+/).map((s) => s.trim()).filter(Boolean);
-    if (cols.length) rows.push({ id: cols[0].replace(/^\*/, ''), user: cols[1] || '', device: cols[3] || '', remote_ip: cols[4] || '', since: cols.slice(5).join(' ') });
-  }
-  return { json: false, list: rows };
+  const txt = ((t.out || '') + (t.err || '')).trim();
+  if (!txt) return { json: false, list: [], error: 'occtl 无输出（ocserv 未运行？）' };
+  return { json: false, list: [], raw: txt };
 }
 /* ---- ocserv.conf 布尔开关 ---- */
 function readOptions() {
