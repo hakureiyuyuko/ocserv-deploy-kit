@@ -29,7 +29,7 @@ const BASE       = __dirname;
 const CONF_FILE  = path.join(BASE, 'config.json');
 const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
-const VERSION    = '1.6.1';
+const VERSION    = '1.6.2';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -443,9 +443,14 @@ const ACME_MIRRORS = [
   'https://ghfast.top/https://raw.githubusercontent.com/acmesh-official/acme.sh/master/',
   'https://gitee.com/neilpang/acme.sh/raw/master/'
 ];
-// 常用 DNS 服务商(其余可用“自定义”填插件名 + KEY=VALUE)
+// 常用 DNS 服务商(其余可用「额外变量」填插件名需改代码 + KEY=VALUE)
+// fields: k=环境变量名 / label=界面标签 / opt=可空 / hint=输入框下方说明
 const DNS_PROVIDERS = [
-  { id: 'cf',   name: 'Cloudflare',        fields: [{ k: 'CF_Token', label: 'API Token' }, { k: 'CF_Account_ID', label: 'Account ID(可空)' }] },
+  { id: 'cf',   name: 'Cloudflare', fields: [
+    { k: 'CF_Token',      label: 'API Token',  hint: 'cfat 开头、40 位以上，创建时只显示一次（列表里「值」列是脱敏的，别从那复制）。权限只需 Zone → DNS → Edit（DNS Write）；不要用 Global API Key。' },
+    { k: 'CF_Account_ID', label: 'Account ID', opt: true, hint: '可空：32 位十六进制。留空时 acme.sh 自行匹配区域。' },
+    { k: 'CF_Zone_ID',    label: 'Zone ID',    opt: true, hint: '可空：32 位十六进制。token 只授权单个区域时填上，省一次区域查询。' }
+  ] },
   { id: 'ali',  name: '阿里云 DNS',         fields: [{ k: 'Ali_Key', label: 'AccessKey ID' }, { k: 'Ali_Secret', label: 'AccessKey Secret' }] },
   { id: 'dp',   name: 'DNSPod / 腾讯云',    fields: [{ k: 'DP_Id', label: 'ID' }, { k: 'DP_Key', label: 'Token' }] },
   { id: 'gd',   name: 'GoDaddy',           fields: [{ k: 'GD_Key', label: 'Key' }, { k: 'GD_Secret', label: 'Secret' }] },
@@ -665,6 +670,8 @@ async function doCert(p, L) {
       }
     }
     if (!lines.length) { L('x 没有填 DNS API 凭据'); return false; }
+    const credIssue = TPL.dnsCredsIssue(prov, env);
+    if (credIssue) { L('x ' + credIssue); return false; }
   }
 
   if (!await ensureAcme(L, email)) return false;

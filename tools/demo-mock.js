@@ -96,12 +96,31 @@
   };
 
   var PROVIDERS = [
-    { id: 'cf', name: 'Cloudflare', fields: [{ k: 'CF_Token', label: 'API Token' }, { k: 'CF_Account_ID', label: 'Account ID(可空)' }] },
+    { id: 'cf', name: 'Cloudflare', fields: [
+      { k: 'CF_Token', label: 'API Token', hint: 'cfat 开头、40 位以上，创建时只显示一次（列表里「值」列是脱敏的）。权限只需 Zone → DNS → Edit；不要用 Global API Key。' },
+      { k: 'CF_Account_ID', label: 'Account ID', opt: true, hint: '可空：32 位十六进制。留空时 acme.sh 自行匹配区域。' },
+      { k: 'CF_Zone_ID', label: 'Zone ID', opt: true, hint: '可空：32 位十六进制。token 只授权单个区域时填上。' }
+    ] },
     { id: 'ali', name: '阿里云 DNS', fields: [{ k: 'Ali_Key', label: 'AccessKey ID' }, { k: 'Ali_Secret', label: 'AccessKey Secret' }] },
     { id: 'dp', name: 'DNSPod / 腾讯云', fields: [{ k: 'DP_Id', label: 'ID' }, { k: 'DP_Key', label: 'Token' }] },
     { id: 'gd', name: 'GoDaddy', fields: [{ k: 'GD_Key', label: 'Key' }, { k: 'GD_Secret', label: 'Secret' }] },
     { id: 'dgon', name: 'DigitalOcean', fields: [{ k: 'DO_API_KEY', label: 'API Token' }] }
   ];
+
+  /* Cloudflare 凭据形状自检（与真实面板 lib/tpl.js 同规则，只做本地判断） */
+  function cfCredsIssue(provider, creds) {
+    function g(k) { return String((creds && creds[k]) || '').trim().replace(/^[\s"']+|[\s"']+$/g, ''); }
+    if (String(provider) !== 'cf') return '';
+    var hex32 = /^[0-9a-f]{32}$/i;
+    var tok = g('CF_Token'), acc = g('CF_Account_ID'), zid = g('CF_Zone_ID');
+    if (!tok) return 'Cloudflare 需要填 API Token（Account ID 可空，只填 Token 也能用）';
+    if (hex32.test(tok)) return '「API Token」填的是 32 位十六进制串（这是 Account ID / Zone ID 的形状）；API Token 是 cfat 开头、40 位以上的字符串，检查是否把两栏的值填反了';
+    if (acc && !hex32.test(acc)) return '「Account ID」应为 32 位十六进制，当前 ' + acc.length + ' 位，看起来是 API Token —— 两栏多半填反了，请对调';
+    if (zid && !hex32.test(zid)) return '「Zone ID」应为 32 位十六进制，当前 ' + zid.length + ' 位';
+    if (!/^[A-Za-z0-9_-]+$/.test(tok)) return '「API Token」含非法字符（可能粘进了空格、引号或列表里的省略号 …）';
+    if (tok.length < 40) return '「API Token」只有 ' + tok.length + ' 位，Cloudflare API Token 一般 40 位以上（Global API Key 是 37 位，本工具不支持）';
+    return '';
+  }
 
   /* ocserv.conf 里的开关：像真后端一样"改文本"，所以「配置」页能看到效果 */
   function readOptions() {
@@ -238,7 +257,7 @@
     panelPw: 'admin',               // 演示口令（可故意输错看拦截）
     panelPort: 19999,
     title: 'ocserv 管理面板（在线演示）',
-    version: '1.6.1-demo',
+    version: '1.6.2-demo',
     svc: { active: true, sub: 'running', pid: '812', restarts: 0 },
     conf: buildConf({ vpnPort: 443, certDir: CERTDIR, domain: DOMAIN }),
     hasConf: true, hasNAT: true, acmeInstalled: true, outIf: 'eth0',
@@ -323,11 +342,13 @@
       var provider = String(p.provider || '');
       var creds = p.creds || {};
       var need = {};
-      (PROVIDERS.filter(function (x) { return x.id === provider; })[0] || { fields: [] }).fields.forEach(function (f) { need[f.k] = f; });
+      var fieldsDef = (PROVIDERS.filter(function (x) { return x.id === provider; })[0] || { fields: [] }).fields;
+      fieldsDef.forEach(function (f) { need[f.k] = f; });
       var missing = Object.keys(need).filter(function (k) {
-        var label = String((need[k] && need[k].label) || '');
-        return label.indexOf('可空') < 0 && !String(creds[k] || '').trim();
+        return !need[k].opt && !String(creds[k] || '').trim();
       });
+      var credIssue = cfCredsIssue(provider, creds);
+      if (credIssue) { L('x ' + credIssue); return false; }
       if (!Object.keys(creds).length || missing.length) {
         L('x 没有填 DNS API 凭据（' + (missing.length ? '缺 ' + missing.join(', ') : '至少要填一个') + '）');
         return false;

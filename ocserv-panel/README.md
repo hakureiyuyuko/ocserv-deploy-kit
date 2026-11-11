@@ -249,6 +249,9 @@ sed -i -e 's/@DOMAIN@/你的域名/' -e 's/@OCSERV_SERVICE@/ocserv/' -e 's/@PANE
 
 ## 更新日志
 
+- **1.6.2** —— Cloudflare DNS-01 表单改为 **API Token** 语义（非 Global API Key）：带字段说明、新增可空
+  `Zone ID`，并在前端与后端各做一次形状校验（32 位十六进制 = Account/Zone ID，40 位以上 = Token），
+  填反或粘到脱敏值时立即报错，不必等到签发失败。
 - **1.6.1** —— 在线会话页列名统一：不再直接把 `occtl -j` 的原始字段名（`Username` / `Groupname` /
   `State` / `vhost` / `Device` / `MTU` / `Remote IP`）当表头，改为固定列（ID / 用户 / 状态 / 设备 /
   来源 IP / 建立时间），字段按别名单映，兼容各版本 occtl；`occtl -j` 不可用时**原样显示文本输出**

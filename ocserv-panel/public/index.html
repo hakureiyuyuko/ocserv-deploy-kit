@@ -694,13 +694,31 @@ function wzSyncMode() {
   $('#wzDns').classList.toggle('hide', m !== 'dns');
   $('#wzUpload').classList.toggle('hide', m !== 'upload');
 }
+// 凭据形状自检（与服务端 lib/tpl.js 的 dnsCredsIssue 同规则）：先把“两栏填反”挡在提交前
+function wzCredsIssue(prov, creds) {
+  const hex32 = /^[0-9a-f]{32}$/i;
+  const g = (k) => String((creds || {})[k] || '').trim().replace(/^[\s"']+|[\s"']+$/g, '');
+  if (prov !== 'cf') return '';
+  const tok = g('CF_Token'), acc = g('CF_Account_ID'), zid = g('CF_Zone_ID');
+  if (!tok) return 'Cloudflare：请填 API Token（Account ID 可空）';
+  if (hex32.test(tok)) return '「API Token」填成了 32 位十六进制（Account ID 的形状），两栏可能填反了';
+  if (acc && !hex32.test(acc)) return '「Account ID」应为 32 位十六进制，当前 ' + acc.length + ' 位，看起来是 API Token —— 两栏填反了';
+  if (zid && !hex32.test(zid)) return '「Zone ID」应为 32 位十六进制，当前 ' + zid.length + ' 位';
+  if (!/^[A-Za-z0-9_-]+$/.test(tok)) return '「API Token」含非法字符（可能粘进了空格、引号或列表里的省略号）';
+  if (tok.length < 40) return '「API Token」只有 ' + tok.length + ' 位，Cloudflare API Token 一般 40 位以上';
+  return '';
+}
 function wzRenderProv() {
   if (!wzSetup) return;
   const list = wzSetup.providers || [];
   const prov = list.filter((p) => p.id === $('#wzProv').value)[0] || { fields: [] };
   $('#wzFields').innerHTML = (prov.fields || []).map((f) =>
-    '<div class="row" style="margin-bottom:6px"><label class="muted" style="width:110px">' + esc(f.label) + '</label>' +
-    '<input data-cred="' + esc(f.k) + '" placeholder="' + esc(f.k) + '" style="width:320px"></div>').join('');
+    '<div class="row" style="margin-bottom:8px;align-items:flex-start">' +
+    '<label class="muted" style="width:110px;padding-top:6px;white-space:nowrap">' + esc(f.label) + '</label>' +
+    '<div style="flex:1;min-width:320px">' +
+    '<input data-cred="' + esc(f.k) + '" placeholder="' + esc(f.k) + '" style="width:320px" autocomplete="off" spellcheck="false">' +
+    (f.hint ? '<div class="muted" style="font-size:12px;line-height:1.5;margin-top:2px;max-width:460px">' + esc(f.hint) + '</div>' : '') +
+    '</div></div>').join('');
 }
 function wzRenderState() {
   if (!wzSetup) { $('#wzState').textContent = '加载中…'; return; }
@@ -761,6 +779,10 @@ $('#wzCertBtn').onclick = async () => {
     body.extra = $('#wzExtra').value.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
   } else if (m === 'upload') { body.cert = $('#wzCertPem').value; body.key = $('#wzKeyPem').value; }
   if (!body.domain) return toast('先填域名', 'warn');
+  if (m === 'dns') {
+    const issue = wzCredsIssue(body.provider, body.creds);
+    if (issue) return toast(issue, 'warn');
+  }
   const b = $('#wzCertBtn'); b.disabled = true; b.textContent = '执行中…（可能要 1~2 分钟）';
   try {
     const r = await apiRaw('/api/setup/cert', { method: 'POST', body });

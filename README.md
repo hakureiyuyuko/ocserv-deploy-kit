@@ -84,8 +84,11 @@ tools/              演示页生成器（node tools/make-demo.mjs）
 | 上传已有证书 | — | 不能（除非之后用上面两种方式签一次） |
 | 自签 | — | 不需要（仅测试，客户端会报证书不受信任） |
 
-DNS-01 内置 Cloudflare、阿里云、DNSPod、GoDaddy、DigitalOcean，其它服务商可在「额外变量」里按
-`KEY=VALUE` 填。凭据存放于 `/etc/ocserv/acme-dns.env`（权限 600），续期任务会自动加载。
+DNS-01 内置 Cloudflare、阿里云、DNSPod、GoDaddy、DigitalOcean。**Cloudflare 用 API Token**（`cfat` 开头，
+权限只需 Zone → DNS → Edit），不是 Global API Key；`Account ID`、`Zone ID` 都可空（token 限定了单个区域时
+填 Zone ID 更稳）。面板会在提交前检查凭据形状，把「两栏填反」「粘到列表里脱敏的值」这类错误直接拦下，
+后端同样校验，签名之前就报错。其它服务商需在 `server.js` 的 `DNS_PROVIDERS` 里加一行（插件文件会自动
+下载），凭据存放于 `/etc/ocserv/acme-dns.env`（权限 600），续期任务会自动加载。
 
 ---
 
@@ -242,6 +245,9 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
 
 ## 更新日志
 
+- **1.6.2** —— 面板 Cloudflare 的 DNS-01 凭据表单按 **API Token**（非 Global API Key）重做：字段带说明，
+  `Account ID` / `Zone ID` 标为可空并新增 `Zone ID` 输入（区域级 token 用）；前端提交前 + 后端写文件前
+  都做形状校验，把「把 Account ID 填进 Token 栏」「粘到列表里脱敏的 `cfat…3503`」这类错误直接拦下并说明原因。
 - **1.6.1** —— 面板「在线会话」页列名统一为固定列（ID / 用户 / 状态 / 设备 / 来源 IP / 建立时间），
   不再直接暴露 `occtl` 的原始字段名；`occtl -j` 不可用时原样显示它的文本输出。
 - **1.6.0** —— 面板「用户管理」新增**认证方式切换**：本地密码文件（默认）/ **PAM**（把服务器加进 LDAP/AD 后走系统认证）。
