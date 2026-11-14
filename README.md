@@ -145,6 +145,26 @@ sudo ./install.sh
 
 ---
 
+## 自动出包（GitHub Actions）
+
+推 `v*` 标签会触发 `.github/workflows/release.yml`：自动构建两个包并挂到该 Release
+（也可用 `workflow_dispatch` 手动跑，只出 artifact 不发 Release）。
+
+- `ocserv-deploy-kit-<版本>.tar.gz` —— 主线（Debian/Ubuntu，apt + systemd）
+- `ocserv-deploy-kit-alpine-x86_64-<版本>.tar.gz` —— Alpine（自编译 ocserv + OpenRC）
+
+构建逻辑与本地一致，主机侧入口是 `alpine/build-package.sh`：
+
+```bash
+bash alpine/build-package.sh --version 1.6.3 --out dist      # 需要 docker
+bash alpine/build-package.sh --version 1.6.3 --arch aarch64  # 交叉（需 binfmt/QEMU）
+```
+
+工作流会先校验 `install.sh` 的 `KIT_VERSION`、`ocserv-panel/server.js` 的 `VERSION` 与标签一致，
+再对产出的 Alpine 包做冒烟测试（用包内二进制跑 `--version`、`node -v`）。
+
+---
+
 ## 在线演示（GitHub Pages）
 
 `docs/` 是一个**纯静态**的面板演示页：把真实前端拿来，前面插一层本地 mock 接口

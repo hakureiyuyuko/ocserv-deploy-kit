@@ -24,6 +24,18 @@ openrc/ocserv, ocserv-panel   OpenRC 服务脚本
 
 形态：x86_64 / musl，安装到 `/opt/ocserv-deploy-kit`（二进制+库）与 `/opt/ocserv-panel`（面板）。
 
+## 自己构建这个包
+
+包由 CI（`.github/workflows/release.yml`）在打标签时自动生成，本地也能复现：
+
+```bash
+bash alpine/build-package.sh --version 1.6.3 --out dist              # x86_64
+sudo bash alpine/build-package.sh --version 1.6.3 --out dist         # 需要 sudo 调 docker 时
+```
+
+编译发生在 `alpine:3.24` 容器里（meson + ninja），Node 取该 Alpine 版本的 `nodejs` 包，
+依赖库解引用后打进 `lib/`，所以目标机不需要网络、也不需要装任何开发包。
+
 ## 安装
 
 ```sh

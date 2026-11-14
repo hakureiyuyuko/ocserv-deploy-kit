@@ -22,3 +22,5 @@ acme-dns.env
 .DS_Store
 Thumbs.db
 desktop.ini
+# CI/本地构建产出
+dist/
