@@ -19,7 +19,7 @@
 # ============================================================================
 set -euo pipefail
 
-KIT_VERSION="1.6.2"
+KIT_VERSION="1.6.3"
 
 PANEL_PORT=19999
 PANEL_HOST="0.0.0.0"
@@ -48,6 +48,33 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$(id -u)" = "0" ] || { echo "请用 root 运行" >&2; exit 1; }
+
+# ---------------------------------------------------------------- 平台检查
+# 本套件的服务单元、NAT 单元、面板的服务控制全部基于 systemd + apt（Debian/Ubuntu）。
+require_supported_os() {
+  if command -v systemctl >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then return 0; fi
+  if command -v apk >/dev/null 2>&1; then
+    cat >&2 <<'E'
+错误：当前是 Alpine（apk），本脚本只支持 Debian / Ubuntu（apt + systemd）。
+
+为什么不是换个包管理器那么简单：
+  · Alpine 稳定仓库（3.18 ~ 3.24）里没有 ocserv 包，只有 edge 有 1.6.0
+  · Alpine 没有 systemd，本套件的 ocserv/面板/NAT 单元、面板的服务启停与状态、
+    日志页（journalctl）都依赖它
+
+在 Alpine 上请用 release 里的 Alpine 一键包（自编译 ocserv 二进制 + OpenRC 单元）：
+  ocserv-deploy-kit-alpine-x86_64-<版本>.tar.gz
+容器化部署也可以用 docker/ 下的 Dockerfile 与离线镜像包。
+E
+    exit 1
+  fi
+  cat >&2 <<'E'
+错误：未检测到 apt-get + systemctl，本脚本只支持 Debian / Ubuntu。
+其它发行版请参考 README；需要容器化部署见 docker/README.md。
+E
+  exit 1
+}
+require_supported_os
 
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m[警告] %s\033[0m\n' "$*"; }

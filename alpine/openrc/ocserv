@@ -1,0 +1,25 @@
+#!/sbin/openrc-run
+# ocserv（用包里自带的二进制，依赖库在 /opt/ocserv-deploy-kit/lib）
+description="OpenConnect VPN server"
+
+: ${OCSERV_CONF:=/etc/ocserv/ocserv.conf}
+command="/opt/ocserv-deploy-kit/bin/ocserv"
+command_args="--foreground --config $OCSERV_CONF --pid-file /run/ocserv.pid"
+command_background=true
+pidfile="/run/ocserv.pid"
+output_log="/var/log/ocserv.log"
+error_log="/var/log/ocserv.log"
+
+depend() {
+    need net
+    after firewall
+    provide ocserv
+}
+
+start_pre() {
+    checkpath --file --mode 0640 --owner root:root "$output_log"
+    if [ ! -e /dev/net/tun ]; then
+        eerror "缺少 /dev/net/tun：容器/精简系统需要先放行 tun 设备"
+        return 1
+    fi
+}

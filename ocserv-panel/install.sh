@@ -32,6 +32,19 @@ GIVEN=" "
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
+require_supported_os() {
+  if command -v systemctl >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then return 0; fi
+  if command -v apk >/dev/null 2>&1; then
+    echo "错误：Alpine（apk）暂不支持：本面板用 systemd 单元托管、用 systemctl 做服务控制，" >&2
+    echo "      Alpine 没有 systemd。请用 release 里的 Alpine 一键包（自带二进制与 OpenRC 单元），" >&2
+    echo "      或仓库 docker/ 下的容器镜像。" >&2
+    exit 1
+  fi
+  echo "错误：未检测到 apt-get + systemctl，本安装脚本只支持 Debian / Ubuntu。" >&2
+  exit 1
+}
+require_supported_os
+
 usage() {
 cat <<'U'
 选项:

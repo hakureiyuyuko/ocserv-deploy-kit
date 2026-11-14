@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+# ocserv 管理面板（Node 运行时也在包里）
+description="ocserv management panel"
+
+command="/opt/ocserv-deploy-kit/bin/node"
+command_args="/opt/ocserv-panel/server.js"
+command_background=true
+pidfile="/run/ocserv-panel.pid"
+output_log="/var/log/ocserv-panel.log"
+error_log="/var/log/ocserv-panel.log"
+
+depend() {
+    need net
+}

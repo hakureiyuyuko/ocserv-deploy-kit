@@ -257,7 +257,7 @@
     panelPw: 'admin',               // 演示口令（可故意输错看拦截）
     panelPort: 19999,
     title: 'ocserv 管理面板（在线演示）',
-    version: '1.6.2-demo',
+    version: '1.6.3-demo',
     svc: { active: true, sub: 'running', pid: '812', restarts: 0 },
     conf: buildConf({ vpnPort: 443, certDir: CERTDIR, domain: DOMAIN }),
     hasConf: true, hasNAT: true, acmeInstalled: true, outIf: 'eth0',

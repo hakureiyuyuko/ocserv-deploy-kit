@@ -124,6 +124,27 @@ docker run -d --name ocserv \
 
 ---
 
+## Alpine（OpenRC）
+
+Alpine 稳定仓库里**没有 ocserv 包**（3.18~3.24 都没有，只有 edge 有且依赖装不上），
+所以单独发一个一键包：`ocserv-deploy-kit-alpine-x86_64-<版本>.tar.gz`（见 Releases）。
+
+包内自带**现场编译的 ocserv 1.6.0 二进制 + 依赖库 + Node 24 + OpenRC 服务脚本**，目标机不用再拉包：
+
+```sh
+tar xzf ocserv-deploy-kit-alpine-x86_64-1.6.3.tar.gz
+cd ocserv-deploy-kit-alpine-x86_64-1.6.3
+sudo ./install.sh
+```
+
+面板同样在 `:19999`，向导流程一致。差异见 [`alpine/README.md`](alpine/README.md)：
+自动续期在 OpenRC 下会被跳过（acme.sh 需联网，续期脚本原本按 systemd 写），
+证书建议用「上传已有证书」；ocserv 版本是 1.6.0（比 Ubuntu 24.04 的 1.2.4 新）。
+
+面板的服务控制从 1.6.3 起走 `lib/svc.js`，按环境自动选 systemd 或 OpenRC，Debian/Ubuntu 行为不变。
+
+---
+
 ## 在线演示（GitHub Pages）
 
 `docs/` 是一个**纯静态**的面板演示页：把真实前端拿来，前面插一层本地 mock 接口
@@ -267,6 +288,10 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
 
 ## 更新日志
 
+- **1.6.3** —— 新增 **Alpine 支持**：面板的服务控制抽成 `lib/svc.js`（systemd / OpenRC 双后端），
+  状态、启停、热重载、日志（`journalctl` ↔ `/var/log/*.log`）、NAT 单元（systemd unit ↔ OpenRC 脚本）
+  都按运行环境自动切换；同时发布**独立的 Alpine 一键包**（自编译 ocserv 1.6.0 二进制 + 依赖库 +
+  Node 24 + OpenRC 单元），因为 Alpine 稳定仓库里没有 ocserv 包。Debian/Ubuntu 路径的行为不变。
 - **1.6.2** —— 面板 Cloudflare 的 DNS-01 凭据表单按 **API Token**（非 Global API Key）重做：字段带说明，
   `Account ID` / `Zone ID` 标为可空并新增 `Zone ID` 输入（区域级 token 用）；前端提交前 + 后端写文件前
   都做形状校验，把「把 Account ID 填进 Token 栏」「粘到列表里脱敏的 `cfat…3503`」这类错误直接拦下并说明原因。

@@ -29,7 +29,7 @@ const BASE       = __dirname;
 const CONF_FILE  = path.join(BASE, 'config.json');
 const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
-const VERSION    = '1.6.2';
+const VERSION    = '1.6.3';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -196,10 +196,7 @@ setInterval(() => {
 /* --------------------------------------------------------- ocserv 操作层 */
 
 async function ocservStatus() {
-  const show = await run('systemctl', ['show', CFG.ocservService,
-    '--property=ActiveState,SubState,MainPID,ExecMainStartTimestamp,NRestarts']);
-  const p = {};
-  show.out.split('\n').forEach((l) => { const i = l.indexOf('='); if (i > 0) p[l.slice(0, i)] = l.slice(i + 1); });
+  const p = await SVC.show(CFG.ocservService);
 
   const verRaw = await run(CFG.ocservBin, ['--version']);           // 注意: 版本信息走 stderr
   const version = ((verRaw.out || '') + (verRaw.err || '')).split('\n').map((s) => s.trim()).filter(Boolean)[0] || '';
@@ -212,8 +209,7 @@ async function ocservStatus() {
   return { ...p, active: await systemctlActive(), version, listen };
 }
 async function systemctlActive() {
-  const r = await run('systemctl', ['is-active', CFG.ocservService]);
-  return (r.out || '').trim();
+  return (await SVC.active(CFG.ocservService)).trim();
 }
 function readUsers() {
   // ocpasswd 行格式: 用户名:组:密码哈希    (无组时写 '*')
@@ -356,7 +352,7 @@ async function setAuthMethod(body) {
     return { ok: false, error: '配置校验失败，已回滚：' + ((t.err || t.out) || '').trim() };
   }
   // 主进程收到 SIGHUP 会给 sec-mod 发信号，认证配置会重新加载
-  const rl = await run('systemctl', ['reload-or-restart', CFG.ocservService], null, 30000);
+  const rl = await SVC.action('reload-or-restart', CFG.ocservService);
   return { ok: true, changed: true, backup: bak, auth: authState(), out: ((rl.out || '') + (rl.err || '')).trim() };
 }
 
@@ -382,7 +378,7 @@ async function setOption(key, value) {
     return { ok: false, error: '配置校验失败，已回滚：' + ((t.err || t.out) || '').trim() };
   }
   // SIGHUP 热重载（不断线）；个别选项可能需重启才完全生效
-  const rl = await run('systemctl', ['reload', CFG.ocservService], null, 30000);
+  const rl = await SVC.action('reload', CFG.ocservService);
   return { ok: true, changed: true, backup: bak, out: ((rl.out || '') + (rl.err || '')).trim() };
 }
 
@@ -413,7 +409,7 @@ async function certInfo() {
 async function renew(force) {
   if (force) {
     const r = await run(CFG.acmeBin, ['--renew', '--force', '-d', CFG.acmeDomain, '--server', CFG.acmeServer], null, 90000);
-    await run('systemctl', ['reload', CFG.ocservService]);
+    await SVC.action('reload', CFG.ocservService);
     return { ok: r.code === 0, out: ((r.out || '') + (r.err || '')).trim().split('\n').slice(-12).join('\n') };
   }
   const r = await run(CFG.renewScript, [], null, 90000);
@@ -460,6 +456,7 @@ const DNS_PROVIDERS = [
 function tpl(name) { return readText(path.join(TPL_DIR, name), null); }
 // 纯函数(模板渲染 / 网段换算 / systemd 单元)集中在 lib/tpl.js，便于脱离 Linux 单独测试
 const TPL = require('./lib/tpl');
+const SVC = require('./lib/svc');
 const fillTpl = TPL.fillTpl;
 function tailOf(r, n) { return String(((r && r.out) || '') + ((r && r.err) || '')).trim().split('\n').slice(-(n || 8)).join('\n'); }
 function writeAs(p, data, mode) {
@@ -480,7 +477,7 @@ async function setupStatus() {
   const hasConf = !!fileInfo(CFG.ocservConf);
   const cert = await certInfo();
   const st = await ocservStatus();
-  const en = (await run('systemctl', ['is-enabled', CFG.ocservService])).out || '';
+  const en = (await SVC.enabled(CFG.ocservService)) || '';
   return {
     initialized: hasConf && cert.exists,
     hasConf, certExists: cert.exists, cert,
@@ -572,7 +569,7 @@ async function runIssue(L, opt, env) {
   const ic = await run(CFG.acmeBin, ['--install-cert', '-d', domain,
     '--key-file', certDir + '/privkey.pem', '--fullchain-file', certDir + '/fullchain.pem',
     '--cert-file', certDir + '/cert.pem', '--ca-file', certDir + '/ca.pem',
-    '--reloadcmd', 'systemctl reload ocserv 2>/dev/null || true'], null, 120000, env);
+    '--reloadcmd', SVC.reloadCmd(CFG.ocservService)], null, 120000, env);
   // 全新部署时 ocserv 还没启动，reloadcmd 会失败 —— 这时 acme.sh 返回非 0 但证书已经写好了，
   // 所以判据是“文件到底写没写”，而不是退出码。
   if (ic.code !== 0) {
@@ -727,9 +724,8 @@ async function doApply(p, L) {
   }
 
   const cidr = vpnNet + '/' + maskBits(vpnMask);
-  writeAs(NAT_UNIT, natUnit(cidr, outIf), 0o644);
-  await run('systemctl', ['daemon-reload'], null, 30000);
-  const nat = await run('systemctl', ['enable', '--now', 'ocserv-nat.service'], null, 30000);
+  const natText = SVC.BACKEND === 'openrc' ? TPL.natInitd(cidr, outIf, CFG.ocservService) : natUnit(cidr, outIf);
+  const nat = await SVC.natInstall(natText, 'ocserv-nat');
   L(nat.code === 0 ? 'v NAT/转发单元已启用（' + cidr + ' 出口 ' + outIf + '）' : '! NAT 单元启用失败:\n' + tailOf(nat));
 
   const rt = tpl('acme-renew.sh.tpl');
@@ -742,14 +738,14 @@ async function doApply(p, L) {
     L('! 找不到 acme-renew.sh.tpl，跳过续期安装');
   }
 
-  await run('systemctl', ['enable', CFG.ocservService], null, 30000);
-  await run('systemctl', ['restart', CFG.ocservService], null, 30000);
+  await SVC.enable(CFG.ocservService);
+  await SVC.action('restart', CFG.ocservService);
   await new Promise((s) => setTimeout(s, 2000));
   const os1 = await ocservStatus();
   const listen = (os1.listen || []).map((x) => x.proto + ' ' + x.port).join(' · ') || '(无)';
   L((os1.active === 'active' ? 'v' : 'x') + ' ocserv 服务: ' + os1.active + '/' + os1.SubState);
   L('v 监听: ' + listen);
-  if (os1.active !== 'active') L('  排查: journalctl -u ' + CFG.ocservService + ' -n 30');
+  if (os1.active !== 'active') L('  排查: ' + SVC.logsHint(CFG.ocservService));
   return os1.active === 'active';
 }
 
@@ -933,15 +929,14 @@ async function handle(req, res) {
 
     if (p === '/api/service' && method === 'POST') {
       if (!['start', 'stop', 'restart', 'reload'].includes(body.action)) return send(res, 400, { error: '不支持的操作' });
-      const r = await run('systemctl', [body.action, CFG.ocservService], null, 30000);
+      const r = await SVC.action(body.action, CFG.ocservService);
       await new Promise((s) => setTimeout(s, 1500));
       const st = await ocservStatus();
       return send(res, r.code === 0 ? 200 : 500, { ok: r.code === 0, out: (r.out + r.err).trim(), state: st.ActiveState, sub: st.SubState });
     }
     if (p === '/api/logs' && method === 'GET') {
       const n = Math.min(Math.max(parseInt(u.searchParams.get('lines') || '200', 10) || 200, 10), 2000);
-      const r = await run('journalctl', ['-u', CFG.ocservService, '-n', String(n), '--no-pager', '-o', 'short-iso']);
-      return send(res, 200, { lines: r.out || r.err });
+      return send(res, 200, { lines: await SVC.logs(CFG.ocservService, n) });
     }
     if (p === '/api/config' && method === 'GET') {
       return send(res, 200, { content: readText(CFG.ocservConf, ''), path: CFG.ocservConf, info: fileInfo(CFG.ocservConf) });
@@ -957,7 +952,7 @@ async function handle(req, res) {
         fs.copyFileSync(bak, CFG.ocservConf);
         return send(res, 400, { error: '配置校验失败，已回滚\n' + (t.err || t.out).trim() });
       }
-      const rl = await run('systemctl', ['reload-or-restart', CFG.ocservService], null, 30000);
+      const rl = await SVC.action('reload-or-restart', CFG.ocservService);
       return send(res, 200, { ok: true, backup: bak, out: (rl.out + rl.err).trim() });
     }
     if (p === '/api/options' && method === 'GET') return send(res, 200, { options: readOptions() });

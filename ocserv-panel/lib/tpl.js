@@ -80,6 +80,43 @@ function natUnit(cidr, iface, ocservService) {
   ].join('\n');
 }
 
+// NAT/转发 OpenRC 服务（Alpine）：开机自动恢复 iptables 规则
+function natInitd(cidr, iface, ocservService) {
+  const svc = ocservService || 'ocserv';
+  return [
+    '#!/sbin/openrc-run',
+    'description="ocserv NAT / forwarding rules"',
+    '',
+    'CIDR="' + cidr + '"',
+    'IFACE="' + iface + '"',
+    '',
+    'depend() {',
+    '    need net',
+    '    after firewall',
+    '    before ' + svc + '',
+    '}',
+    '',
+    'start() {',
+    '    ebegin "Adding NAT rules for $CIDR via $IFACE"',
+    '    sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1',
+    '    iptables -t nat -C POSTROUTING -s "$CIDR" -o "$IFACE" -j MASQUERADE 2>/dev/null || \\',
+    '        iptables -t nat -A POSTROUTING -s "$CIDR" -o "$IFACE" -j MASQUERADE',
+    '    iptables -C FORWARD -s "$CIDR" -j ACCEPT 2>/dev/null || iptables -A FORWARD -s "$CIDR" -j ACCEPT',
+    '    iptables -C FORWARD -d "$CIDR" -j ACCEPT 2>/dev/null || iptables -A FORWARD -d "$CIDR" -j ACCEPT',
+    '    eend $?',
+    '}',
+    '',
+    'stop() {',
+    '    ebegin "Removing NAT rules for $CIDR"',
+    '    iptables -t nat -D POSTROUTING -s "$CIDR" -o "$IFACE" -j MASQUERADE 2>/dev/null',
+    '    iptables -D FORWARD -s "$CIDR" -j ACCEPT 2>/dev/null',
+    '    iptables -D FORWARD -d "$CIDR" -j ACCEPT 2>/dev/null',
+    '    eend 0',
+    '}',
+    ''
+  ].join('\n');
+}
+
 function validDomain(d) {
   return /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(String(d || ''));
 }
@@ -113,4 +150,4 @@ function dnsCredsIssue(provider, creds) {
   return '';
 }
 
-module.exports = { fillTpl, missingPlaceholders, maskBits, natUnit, renderConf, renderRenew, validDomain, isIp, validUnixName, dnsCredsIssue };
+module.exports = { fillTpl, missingPlaceholders, maskBits, natUnit, natInitd, renderConf, renderRenew, validDomain, isIp, validUnixName, dnsCredsIssue };

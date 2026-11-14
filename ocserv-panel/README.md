@@ -249,6 +249,8 @@ sed -i -e 's/@DOMAIN@/你的域名/' -e 's/@OCSERV_SERVICE@/ocserv/' -e 's/@PANE
 
 ## 更新日志
 
+- **1.6.3** —— 服务管理抽成 `lib/svc.js`：systemd / OpenRC 双后端，状态、启停、reload、
+  enabled、日志、NAT 单元都自动适配；Alpine 上用 OpenRC（配合 release 里的 Alpine 一键包）。
 - **1.6.2** —— Cloudflare DNS-01 表单改为 **API Token** 语义（非 Global API Key）：带字段说明、新增可空
   `Zone ID`，并在前端与后端各做一次形状校验（32 位十六进制 = Account/Zone ID，40 位以上 = Token），
   填反或粘到脱敏值时立即报错，不必等到签发失败。
