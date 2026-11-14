@@ -71,6 +71,8 @@ acme/               acme.sh 客户端 + 签发/续期脚本（单独使用时用
 ocserv/             ocserv.conf 模板与 NAT 单元样板
 docs/               面板在线演示页（GitHub Pages 用，安装时不需要）
 tools/              演示页生成器（node tools/make-demo.mjs）
+Dockerfile          容器镜像（ocserv + 面板），说明见 docker/README.md
+docker/             容器入口脚本与 compose 示例
 ```
 
 ---
@@ -99,6 +101,26 @@ DNS-01 内置 Cloudflare、阿里云、DNSPod、GoDaddy、DigitalOcean。**Cloud
 证书（详情 / 下次续期 / 手动续期 / 续期日志）、面板设置（改面板管理员密码 / 面板端口）。
 
 详见 `ocserv-panel/README.md`。
+
+---
+
+## 容器镜像（Docker）
+
+不想在主机上装东西时可以跑容器（ocserv 1.2.4 + 面板）：
+
+```bash
+docker build -t ocserv-deploy-kit:1.6.2 .
+docker run -d --name ocserv \
+  --device /dev/net/tun --cap-add NET_ADMIN \
+  -e OC_DOMAIN=vpn.example.com -e VPN_USER=alice -e VPN_PASS='强密码' \
+  -e PANEL_ADMIN_PASSWORD='面板密码' \
+  -p 443:443/tcp -p 443:443/udp -p 19999:19999 \
+  ocserv-deploy-kit:1.6.2
+```
+
+配置、用户、NAT、自签证书都由入口脚本按环境变量生成（变量表与限制见
+[`docker/README.md`](docker/README.md)）。**容器里没有 systemd**：面板的服务启停、配置向导第 4 步、
+日志页（读 journal）不可用；需要面板全功能请用主机安装。
 
 ---
 

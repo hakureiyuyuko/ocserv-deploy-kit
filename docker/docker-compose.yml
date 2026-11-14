@@ -1,0 +1,41 @@
+# ocserv-deploy-kit 的 compose 示例
+#   docker compose -f docker/docker-compose.yml up -d
+# 构建上下文是仓库根目录，所以构建时用 -f 指定本文件即可
+services:
+  ocserv:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ocserv-deploy-kit:1.6.2
+    container_name: ocserv
+    restart: unless-stopped
+    devices:
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "443:443/tcp"
+      - "443:443/udp"
+      - "19999:19999"
+    environment:
+      OC_DOMAIN: vpn.example.com
+      OC_PORT: "443"
+      OC_NET: 10.66.66.0
+      OC_MASK: 255.255.255.0
+      OC_DNS1: 1.1.1.1
+      OC_DNS2: 8.8.8.8
+      VPN_USER: alice
+      VPN_PASS: change-me
+      PANEL_ADMIN_PASSWORD: change-me-too
+      ENABLE_NAT: "1"
+    volumes:
+      - ocserv-etc:/etc/ocserv
+      - ocserv-certs:/etc/ssl/securev
+      - panel-state:/var/lib/ocserv-panel
+      - ocserv-log:/var/log
+
+volumes:
+  ocserv-etc:
+  ocserv-certs:
+  panel-state:
+  ocserv-log:

@@ -1,0 +1,12 @@
+.git
+.gitignore
+.gitattributes
+docs
+tools
+testbed
+ref
+*.tar.gz
+*.bak-*
+ocserv-panel/backup-*
+ocserv-panel/config.json
+ocserv-panel/admin-cred.txt
