@@ -29,7 +29,7 @@ const BASE       = __dirname;
 const CONF_FILE  = path.join(BASE, 'config.json');
 const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
-const VERSION    = '1.6.3';
+const VERSION    = '1.6.4';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -729,7 +729,10 @@ async function doApply(p, L) {
   L(nat.code === 0 ? 'v NAT/转发单元已启用（' + cidr + ' 出口 ' + outIf + '）' : '! NAT 单元启用失败:\n' + tailOf(nat));
 
   const rt = tpl('acme-renew.sh.tpl');
-  if (rt) {
+  if (rt && SVC.BACKEND === 'openrc') {
+    L('! Alpine/OpenRC：跳过自动续期安装（续期脚本按 systemd 写、acme.sh 也要联网）');
+    L('  证书请用「上传已有证书」，或装好 acme.sh 后在「证书」页手动续期');
+  } else if (rt) {
     writeAs('/usr/local/bin/acme-renew.sh',
       fillTpl(rt, { DOMAIN: domain, OCSERV_SERVICE: CFG.ocservService, PANEL_SERVICE: PANEL_SVC }), 0o755);
     await run('bash', ['-c', "crontab -l 2>/dev/null | grep -v 'acme-renew.sh' > /tmp/.ct.new || true; echo '30 3 * * * /usr/local/bin/acme-renew.sh' >> /tmp/.ct.new; crontab /tmp/.ct.new"], null, 30000);
@@ -740,12 +743,20 @@ async function doApply(p, L) {
 
   await SVC.enable(CFG.ocservService);
   await SVC.action('restart', CFG.ocservService);
-  await new Promise((s) => setTimeout(s, 2000));
-  const os1 = await ocservStatus();
+  let os1 = await ocservStatus();
+  // 起服务有延迟：最多等 ~6 秒，别用固定 sleep 误判
+  for (let i = 0; i < 10 && os1.active !== 'active'; i++) {
+    await new Promise((s) => setTimeout(s, 600));
+    os1 = await ocservStatus();
+  }
   const listen = (os1.listen || []).map((x) => x.proto + ' ' + x.port).join(' · ') || '(无)';
   L((os1.active === 'active' ? 'v' : 'x') + ' ocserv 服务: ' + os1.active + '/' + os1.SubState);
   L('v 监听: ' + listen);
-  if (os1.active !== 'active') L('  排查: ' + SVC.logsHint(CFG.ocservService));
+  if (os1.active !== 'active') {
+    const tail = ((await SVC.logs(CFG.ocservService, 12)) || '').trim();
+    if (tail) L('  最近的 ocserv 日志:\n' + tail);
+    L('  排查: ' + SVC.logsHint(CFG.ocservService));
+  }
   return os1.active === 'active';
 }
 

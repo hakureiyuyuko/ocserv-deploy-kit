@@ -49,10 +49,18 @@ cp -a "$SRC/ocserv-panel/." "$PANEL/"
 mkdir -p /etc/ocserv /etc/ssl/securev /usr/local/sbin
 chmod 700 /etc/ssl/securev
 
-# 命令入口（不覆盖系统已有的同名命令）
-if [ ! -e /usr/local/sbin/ocserv ]; then
-  printf '#!/bin/sh\nexec %s/bin/ocserv "$@"\n' "$PREFIX" > /usr/local/sbin/ocserv
-  chmod 755 /usr/local/sbin/ocserv
+# 命令入口：ocserv / occtl / ocpasswd（面板会直接调 ocpasswd、occtl，必须在 PATH 里）
+for b in ocserv occtl ocpasswd; do
+  if [ ! -e "/usr/local/sbin/$b" ]; then
+    printf '#!/bin/sh\nexec %s/bin/%s "$@"\n' "$PREFIX" "$b" > "/usr/local/sbin/$b"
+    chmod 755 "/usr/local/sbin/$b"
+  fi
+done
+
+# 每用户防火墙脚本（ocserv 按编译期路径 /usr/libexec/ocserv-fw 去找）
+if [ -f "$PREFIX/share/ocserv-fw" ]; then
+  mkdir -p /usr/libexec
+  install -m 755 "$PREFIX/share/ocserv-fw" /usr/libexec/ocserv-fw
 fi
 
 # ocserv 运行用户（模板里 run-as-user = ocserv）

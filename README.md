@@ -308,6 +308,10 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
 
 ## 更新日志
 
+- **1.6.4** —— Alpine 包修复：补发 `ocserv-worker`（1.6 按「主程序路径 + `-worker`」查找，
+  名字必须是 `ocserv.real-worker`）、`occtl`、`ocpasswd`、`ocserv-fw`，并在 `/usr/local/sbin` 建入口
+  —— 之前向导里「用户创建失败: spawn ocpasswd ENOENT」就是漏了 ocpasswd；OpenRC 下不再安装
+  systemd 版续期脚本，服务启动改为轮询等待，失败时把 ocserv 日志尾部一起打印出来。
 - **1.6.3** —— 新增 **Alpine 支持**：面板的服务控制抽成 `lib/svc.js`（systemd / OpenRC 双后端），
   状态、启停、热重载、日志（`journalctl` ↔ `/var/log/*.log`）、NAT 单元（systemd unit ↔ OpenRC 脚本）
   都按运行环境自动切换；同时发布**独立的 Alpine 一键包**（自编译 ocserv 1.6.0 二进制 + 依赖库 +
