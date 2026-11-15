@@ -249,6 +249,9 @@ sed -i -e 's/@DOMAIN@/你的域名/' -e 's/@OCSERV_SERVICE@/ocserv/' -e 's/@PANE
 
 ## 更新日志
 
+- **1.6.5** —— OpenRC：续期改用 POSIX sh 脚本 + busybox crond（不再需要 bash/systemd）；
+  `ensureAcme` 优先用系统 acme.sh（`/usr/bin/acme.sh`），dnsapi 插件改放到 `~/.acme.sh/dnsapi`
+  并支持直接复用系统包自带的插件。Alpine 的 OpenRC 启动脚本会自动准备 `/dev/net/tun`。
 - **1.6.4** —— 向导：OpenRC 下跳过 systemd 版续期脚本；服务启动改为轮询（最多 6 秒），
   仍失败时把 ocserv 日志尾部贴进向导输出；Alpine 包补齐 ocserv-worker/occtl/ocpasswd。
 - **1.6.3** —— 服务管理抽成 `lib/svc.js`：systemd / OpenRC 双后端，状态、启停、reload、

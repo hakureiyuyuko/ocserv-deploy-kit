@@ -35,8 +35,10 @@ command -v apk >/dev/null 2>&1 || die "这个包只用于 Alpine（找不到 apk
 [ "$(uname -m)" = "x86_64" ] || die "本包只含 x86_64 二进制，当前是 $(uname -m)"
 
 say "1/5 运行时依赖"
-apk add --no-cache iptables ca-certificates openssl >/dev/null 2>&1 \
-  || warn "apk 装包失败（离线？）—— 请自行确保 iptables / openssl / ca-certificates 可用"
+apk add --no-cache iptables ca-certificates openssl curl >/dev/null 2>&1 \
+  || warn "apk 装包失败（离线？）—— 请自行确保 iptables / openssl / ca-certificates / curl 可用"
+# acme.sh（Alpine 包是纯 sh，不依赖 bash）；离线装不上也不影响面板与 ocserv
+apk add --no-cache acme.sh >/dev/null 2>&1 || true
 
 say "2/5 部署二进制与面板"
 mkdir -p "$PREFIX/bin" "$PREFIX/lib" "$PANEL"
@@ -83,7 +85,7 @@ if [ ! -f "$PANEL/config.json" ]; then
   "ocservBin": "$PREFIX/bin/ocserv",
   "ocservService": "ocserv",
   "acmeDomain": "",
-  "acmeBin": "/root/.acme.sh/acme.sh",
+  "acmeBin": "$([ -x /usr/bin/acme.sh ] && echo /usr/bin/acme.sh || echo /root/.acme.sh/acme.sh)",
   "certFile": "",
   "keyFile": ""
 }

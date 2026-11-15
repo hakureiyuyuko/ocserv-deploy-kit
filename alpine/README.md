@@ -57,8 +57,11 @@ sudo ./install.sh                       # 可选 --panel-port，--admin-password
 
 ## 已知限制
 
-- **自动续期未安装**：面板在 OpenRC 环境下会提示跳过（acme.sh 需要联网，且续期脚本原本按
-  systemd 写）。证书请用「上传已有证书」，或装好 acme.sh 后手动在「证书」页续期。
+- **自动续期**：1.6.5 起用 **POSIX sh** 版脚本 + busybox crond（`/etc/periodic/daily/acme-renew`），
+  不再依赖 bash。acme.sh 优先用 Alpine 官方包（`apk add acme.sh`，纯 sh），装不上时面板会尝试
+  从镜像下载；DNS-01 仍需联网与 API 凭据，离线环境建议「上传已有证书」。
+- **tun 模块**：VM 上 `/dev/net/tun` 由内核模块 `tun` 提供，启动脚本会自动 `modprobe tun` 并按需
+  创建设备节点；容器里仍需 `--device /dev/net/tun`。
 - 面板自身改端口会重启进程，OpenRC 的监督可能把它记为 stopped；改完执行一次
   `rc-service ocserv-panel restart` 即可。
 - ocserv 版本为 1.6.0（比 Ubuntu 24.04 的 1.2.4 新，已含上游 1.5.0 的两项 `[SECURITY]` 修复）。

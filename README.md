@@ -308,6 +308,10 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
 
 ## 更新日志
 
+- **1.6.5** —— Alpine 两处修复：① 服务起不来是因为精简系统/VM 上 tun 是内核模块、没加载时
+  `/dev/net/tun` 不存在，OpenRC 脚本现在自动 `modprobe tun` + `mknod`，并把失败原因写进
+  `/var/log/ocserv.log`；② 续期不再依赖 bash —— 新增 **POSIX sh** 版续期脚本 + busybox crond 的
+  `/etc/periodic/daily` 任务（acme.sh 本身是纯 sh，Alpine 官方包 `apk add acme.sh` 即可）。
 - **1.6.4** —— Alpine 包修复：补发 `ocserv-worker`（1.6 按「主程序路径 + `-worker`」查找，
   名字必须是 `ocserv.real-worker`）、`occtl`、`ocpasswd`、`ocserv-fw`，并在 `/usr/local/sbin` 建入口
   —— 之前向导里「用户创建失败: spawn ocpasswd ENOENT」就是漏了 ocpasswd；OpenRC 下不再安装

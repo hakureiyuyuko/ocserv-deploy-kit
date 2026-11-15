@@ -16,10 +16,29 @@ depend() {
     provide ocserv
 }
 
+# 精简系统 / 虚拟机上 tun 是内核模块，没加载时 /dev/net/tun 不存在，
+# ocserv 会直接起不来。这里尝试 modprobe + mknod，并把失败原因写进日志
+ensure_tun() {
+    [ -c /dev/net/tun ] && return 0
+    modprobe tun >/dev/null 2>&1
+    [ -d /dev/net ] || mkdir -p /dev/net 2>/dev/null
+    [ -e /dev/net/tun ] || mknod /dev/net/tun c 10 200 >/dev/null 2>&1
+    [ -c /dev/net/tun ] && chmod 600 /dev/net/tun 2>/dev/null
+    [ -c /dev/net/tun ]
+}
+
 start_pre() {
-    checkpath --file --mode 0640 --owner root:root "$output_log"
-    if [ ! -e /dev/net/tun ]; then
-        eerror "缺少 /dev/net/tun：容器/精简系统需要先放行 tun 设备"
+    checkpath --file --mode 0640 --owner root:root "$output_log" 2>/dev/null
+    if ! ensure_tun; then
+        echo "$(date '+%F %T') 启动失败：没有可用的 /dev/net/tun（已尝试 modprobe tun / mknod）。" >> "$output_log"
+        echo "  · VM：确认内核有 tun 模块（lsmod | grep tun，或 modprobe tun）" >> "$output_log"
+        echo "  · 容器：运行时加 --device /dev/net/tun --cap-add NET_ADMIN" >> "$output_log"
+        eerror "缺少 /dev/net/tun（已尝试加载模块）；详情见 /var/log/ocserv.log"
+        return 1
+    fi
+    if [ ! -f "$OCSERV_CONF" ]; then
+        echo "$(date '+%F %T') 启动失败：找不到 $OCSERV_CONF（先在面板「配置向导」完成第 4 步）" >> "$output_log"
+        eerror "找不到 $OCSERV_CONF"
         return 1
     fi
 }

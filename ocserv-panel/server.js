@@ -29,7 +29,9 @@ const BASE       = __dirname;
 const CONF_FILE  = path.join(BASE, 'config.json');
 const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
-const VERSION    = '1.6.4';
+// acme.sh 的工作目录（证书、账号、dnsapi 插件都在这里）
+const ACME_HOME  = path.join(os.homedir() || '/root', '.acme.sh');
+const VERSION    = '1.6.5';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -494,6 +496,20 @@ async function setupStatus() {
 
 async function ensureAcme(L, email) {
   if (fileInfo(CFG.acmeBin)) { L('acme.sh 已存在: ' + CFG.acmeBin); return true; }
+  // 发行版包（Alpine: apk add acme.sh）优先：纯 sh，不拉 bash，也不依赖镜像
+  if (fileInfo('/usr/bin/acme.sh')) {
+    CFG.acmeBin = '/usr/bin/acme.sh';
+    saveConfig(CFG);
+    L('v 使用系统 acme.sh: /usr/bin/acme.sh');
+    return true;
+  }
+  const apk = await run('apk', ['add', '--no-cache', 'acme.sh'], null, 120000);
+  if (apk.code === 0 && fileInfo('/usr/bin/acme.sh')) {
+    CFG.acmeBin = '/usr/bin/acme.sh';
+    saveConfig(CFG);
+    L('v 已通过 apk 安装 acme.sh（/usr/bin/acme.sh）');
+    return true;
+  }
   L('未装 acme.sh，依次尝试镜像下载…');
   let ok = false;
   for (const base of ACME_MIRRORS) {
@@ -529,10 +545,15 @@ async function setAcmeEmail(L, email) {
 }
 
 async function ensureDnsapi(plugin, L) {
-  const dir = path.join(path.dirname(CFG.acmeBin), 'dnsapi');
+  const dir = path.join(ACME_HOME, 'dnsapi');
   const file = path.join(dir, plugin + '.sh');
   const mark = plugin + '_add()';
+  const sysFile = '/usr/share/acme.sh/dnsapi/' + plugin + '.sh';
   if (String(readText(file, '')).indexOf(mark) >= 0) { L('插件已存在: ' + file); return true; }
+  if (String(readText(sysFile, '')).indexOf(mark) >= 0) {
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+    try { fs.copyFileSync(sysFile, file); L('v 使用系统自带插件 ' + sysFile); return true; } catch (e) {}
+  }
   try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
   for (const base of ACME_MIRRORS) {
     const url = base + 'dnsapi/' + plugin + '.sh';
@@ -729,9 +750,26 @@ async function doApply(p, L) {
   L(nat.code === 0 ? 'v NAT/转发单元已启用（' + cidr + ' 出口 ' + outIf + '）' : '! NAT 单元启用失败:\n' + tailOf(nat));
 
   const rt = tpl('acme-renew.sh.tpl');
-  if (rt && SVC.BACKEND === 'openrc') {
-    L('! Alpine/OpenRC：跳过自动续期安装（续期脚本按 systemd 写、acme.sh 也要联网）');
-    L('  证书请用「上传已有证书」，或装好 acme.sh 后在「证书」页手动续期');
+  if (SVC.BACKEND === 'openrc') {
+    // Alpine：用 POSIX sh 版续期脚本 + busybox crond，不依赖 bash / systemd
+    const rtSh = tpl('acme-renew.openrc.sh.tpl');
+    if (!rtSh) {
+      L('! 找不到 acme-renew.openrc.sh.tpl，跳过续期安装');
+    } else {
+      writeAs('/usr/local/bin/acme-renew.sh', fillTpl(rtSh, {
+        DOMAIN: domain,
+        ACME_BIN: CFG.acmeBin || '/usr/bin/acme.sh',
+        ACME_HOME: ACME_HOME,
+        OCSERV_SERVICE: CFG.ocservService,
+        PANEL_SERVICE: PANEL_SVC
+      }), 0o755);
+      writeAs('/etc/periodic/daily/acme-renew', '#!/bin/sh\nexec /usr/local/bin/acme-renew.sh\n', 0o755);
+      await run('rc-update', ['add', 'crond', 'default'], null, 30000);
+      const cs = await run('rc-service', ['crond', 'start'], null, 30000);
+      L(cs.code === 0
+        ? 'v 已安装续期脚本（POSIX sh）+ busybox 每日任务 /etc/periodic/daily/acme-renew'
+        : '! 续期脚本已装，但 crond 启动失败，请手动 rc-service crond start');
+    }
   } else if (rt) {
     writeAs('/usr/local/bin/acme-renew.sh',
       fillTpl(rt, { DOMAIN: domain, OCSERV_SERVICE: CFG.ocservService, PANEL_SERVICE: PANEL_SVC }), 0o755);
