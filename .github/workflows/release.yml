@@ -1,0 +1,111 @@
+name: release
+
+# 推 v* 标签 = 自动出包并挂到 Release；也可以手动触发（只产出 artifact，不发 Release）
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（不带 v，需与 install.sh 的 KIT_VERSION 一致）'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建发行包
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析版本号
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V='${{ inputs.version }}'
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "版本: $V"
+
+      - name: 校验版本一致性
+        run: |
+          set -euo pipefail
+          V='${{ steps.ver.outputs.version }}'
+          grep -q "KIT_VERSION=\"$V\"" install.sh || { echo "install.sh 的 KIT_VERSION 不是 $V"; exit 1; }
+          grep -q "VERSION *= *'$V'" ocserv-panel/server.js || { echo "server.js 的 VERSION 不是 $V"; exit 1; }
+          [ -x alpine/install.sh ] || chmod +x alpine/install.sh
+
+      - name: 构建 Alpine 包（自编译 ocserv + 内置 Node）
+        run: bash alpine/build-package.sh --version '${{ steps.ver.outputs.version }}' --out dist
+
+      - name: 构建主线包（不含 docs/ 与 tools/）
+        run: |
+          set -euo pipefail
+          V='${{ steps.ver.outputs.version }}'
+          mkdir -p dist/kit/ocserv-deploy-kit
+          git ls-files | grep -vE '^(\.github/|docs/|tools/)' | tar -cf - -T - | tar -xf - -C dist/kit/ocserv-deploy-kit
+          tar czf "dist/ocserv-deploy-kit-${V}.tar.gz" -C dist/kit ocserv-deploy-kit
+          rm -rf dist/kit
+
+      - name: 冒烟测试（Alpine 包能装能跑）
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/dist:/d" alpine:latest sh -c '
+            cd /d && tar xzf ocserv-deploy-kit-alpine-*.tar.gz
+            P=$(ls -d ocserv-deploy-kit-alpine-*/ | head -1)
+            "$P/bin/ocserv" --version | head -1
+            "$P/bin/node" -v
+            sh -n "$P/install.sh"
+            ls "$P/lib" | wc -l
+          '
+
+      - name: 生成校验和
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum ./*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: 上传 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocserv-deploy-kit-${{ steps.ver.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: 查找手写 Release 说明
+        id: notes
+        run: |
+          F=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$F" ]; then echo "path=$F" >> "$GITHUB_OUTPUT"; echo "使用 $F"; fi
+
+      - name: 发布到 Release（手写说明）
+        if: startsWith(github.ref, 'refs/tags/') && steps.notes.outputs.path != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.version }}
+          body_path: ${{ steps.notes.outputs.path }}
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
+
+      - name: 发布到 Release（自动生成说明）
+        if: startsWith(github.ref, 'refs/tags/') && steps.notes.outputs.path == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
