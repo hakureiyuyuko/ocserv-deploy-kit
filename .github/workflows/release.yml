@@ -59,12 +59,13 @@ jobs:
       - name: 冒烟测试（Alpine 包能装能跑）
         run: |
           set -euo pipefail
-          docker run --rm -v "$PWD/dist:/d" alpine:latest sh -c '
-            cd /d && tar xzf ocserv-deploy-kit-alpine-*.tar.gz
+          docker run --rm -v "$PWD/dist:/d:ro" alpine:latest sh -c '
+            mkdir -p /tmp/t && cd /tmp/t && tar xzf /d/ocserv-deploy-kit-alpine-*.tar.gz
             P=$(ls -d ocserv-deploy-kit-alpine-*/ | head -1)
             "$P/bin/ocserv" --version | head -1
             "$P/bin/node" -v
             sh -n "$P/install.sh"
+            [ -x "$P/bin/ocserv.real-worker" ] && echo "worker: ok"
             ls "$P/lib" | wc -l
           '
 
