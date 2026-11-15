@@ -249,6 +249,8 @@ sed -i -e 's/@DOMAIN@/你的域名/' -e 's/@OCSERV_SERVICE@/ocserv/' -e 's/@PANE
 
 ## 更新日志
 
+- **1.6.7** —— 状态页的 NAT 单元路径按服务管理器取（OpenRC 用 `/etc/init.d/ocserv-nat`），
+  并显示服务是否在运行；重启提示同样按后端给出正确命令。
 - **1.6.6** —— acme.sh 可用性判断改为实测（`sh <acme.sh> --version`），并统一用 `/bin/sh` 调用，
   修「文件在但 spawn ENOENT」；候选路径依次回退（配置值 → `/usr/bin/acme.sh` → `~/.acme.sh/acme.sh`），
   下载安装改用 `sh` 且加 `--nocron`。

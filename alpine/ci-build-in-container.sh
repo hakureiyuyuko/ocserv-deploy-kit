@@ -28,8 +28,32 @@ apk add --no-cache build-base meson ninja pkgconf \
 
 say "编译 ocserv ${OCSERV_VERSION}"
 cd "$WORK"
-curl -fsSL -o "ocserv.tar.xz" "https://www.infradead.org/ocserv/download/ocserv-${OCSERV_VERSION}.tar.xz"
-xz -dc "ocserv.tar.xz" | tar xf -
+# 允许外部提供源码包（离线/内网构建用）：OCSERV_SRC 指向容器内路径
+if [ -n "${OCSERV_SRC:-}" ] && [ -f "$OCSERV_SRC" ]; then
+  echo "  源: $OCSERV_SRC（本地提供）"
+  case "$OCSERV_SRC" in
+    *.xz) xz -dc "$OCSERV_SRC" | tar xf - ;;
+    *.gz|*.tgz) tar xzf "$OCSERV_SRC" ;;
+    *) echo "x 不认识的源码包格式: $OCSERV_SRC" >&2; exit 1 ;;
+  esac
+else
+# 官方站偶发 TLS 中断，加 GitLab 归档作为备用源
+fetch_ocserv() {
+  for u in \
+    "https://www.infradead.org/ocserv/download/ocserv-${OCSERV_VERSION}.tar.xz" \
+    "https://gitlab.com/openconnect/ocserv/-/archive/${OCSERV_VERSION}/ocserv-${OCSERV_VERSION}.tar.gz" \
+    "https://ghfast.top/https://gitlab.com/openconnect/ocserv/-/archive/${OCSERV_VERSION}/ocserv-${OCSERV_VERSION}.tar.gz"
+  do
+    echo "  源: $u"
+    case "$u" in
+      *.xz) curl -fsSL --retry 2 --max-time 180 -o ocserv.tar.xz "$u" && xz -dc ocserv.tar.xz | tar xf - && return 0 ;;
+      *.gz) curl -fsSL --retry 2 --max-time 180 -o ocserv.tar.gz "$u" && tar xzf ocserv.tar.gz && return 0 ;;
+    esac
+  done
+  return 1
+}
+fetch_ocserv || { echo "x 无法下载 ocserv ${OCSERV_VERSION} 源码" >&2; exit 1; }
+fi
 cd "ocserv-${OCSERV_VERSION}"
 meson setup build --prefix=/usr --sbindir=/usr/sbin --sysconfdir=/etc \
   -Dtests=false -Dsystemd=disabled -Dgssapi=disabled -Dradius=disabled \

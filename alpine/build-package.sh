@@ -21,6 +21,7 @@ ALPINE_VER="3.24"
 OCSERV_VERSION="1.6.0"
 ARCH="x86_64"
 DOCKER="${DOCKER:-docker}"
+OCSERV_SRC=""
 
 usage() {
   sed -n '5,16p' "$0" | sed 's/^# \{0,1\}//'
@@ -33,6 +34,7 @@ while [ $# -gt 0 ]; do
     --alpine)  ALPINE_VER="$2"; shift 2;;
     --ocserv)  OCSERV_VERSION="$2"; shift 2;;
     --arch)    ARCH="$2"; shift 2;;
+    --source)  OCSERV_SRC="$2"; shift 2;;
     -h|--help) usage; exit 0;;
     *) echo "未知参数: $1" >&2; usage; exit 1;;
   esac
@@ -56,6 +58,8 @@ $DOCKER run --rm --platform "$PLATFORM" \
   -e VERSION="$VERSION" \
   -e OCSERV_VERSION="$OCSERV_VERSION" \
   -e ARCH="$ARCH" \
+  -e OCSERV_SRC="${OCSERV_SRC:+"/src-ocserv$(basename "$OCSERV_SRC")"}" \
+  ${OCSERV_SRC:+-v "$OCSERV_SRC:/src-ocserv$(basename "$OCSERV_SRC"):ro"} \
   -v "$REPO:/src:ro" \
   -v "$OUT:/out" \
   "alpine:${ALPINE_VER}" sh /src/alpine/ci-build-in-container.sh

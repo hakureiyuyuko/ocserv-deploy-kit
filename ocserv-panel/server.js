@@ -31,7 +31,7 @@ const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
 // acme.sh 的工作目录（证书、账号、dnsapi 插件都在这里）
 const ACME_HOME  = path.join(os.homedir() || '/root', '.acme.sh');
-const VERSION    = '1.6.6';
+const VERSION    = '1.6.7';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -90,7 +90,7 @@ function credText(cfg, user, pw) {
     '用户名:   ' + user + '\n' +
     '密码:     ' + pw + '\n' +
     '改密码:   面板「面板设置」页；或 node ' + __filename + ' --set-password ' + user + ' <新密码>' +
-    '（面板正在运行时需 systemctl restart ' + PANEL_SERVICE + ' 才生效）\n';
+    '（面板正在运行时需 ' + SVC.restartHint(PANEL_SERVICE) + ' 才生效）\n';
 }
 function writeCredFile(cfg, user, pw) {
   try { fs.writeFileSync(CRED_FILE, credText(cfg, user, pw), { mode: 0o600 }); } catch (e) {}
@@ -131,7 +131,7 @@ if (process.argv[2] === '--set-password') {
   saveConfig(cfg);
   writeCredFile(cfg, user, pw);
   console.log('已设置 ' + user + ' 的密码');
-  console.log('提示: 若面板正在运行, 需 systemctl restart ' + PANEL_SERVICE + ' 后新密码才生效（或在面板「面板设置」页改，立即生效）');
+  console.log('提示: 若面板正在运行, 需 ' + SVC.restartHint(PANEL_SERVICE) + ' 后新密码才生效（或在面板「面板设置」页改，立即生效）');
   process.exit(0);
 }
 
@@ -434,7 +434,9 @@ function systemInfo() {
 
 const TPL_DIR   = path.join(BASE, 'templates');
 const DNS_ENV   = '/etc/ocserv/acme-dns.env';
-const NAT_UNIT  = '/etc/systemd/system/ocserv-nat.service';
+// NAT 单元路径随服务管理器变化：systemd 用 unit 文件，OpenRC 用 /etc/init.d/ocserv-nat
+// 注意：SVC 在下面才 require，这里用函数延迟求值
+function natUnitFile() { return SVC.natUnitPath(); }
 const PANEL_SVC = 'ocserv-panel';
 const ACME_MIRRORS = [
   'https://cdn.jsdelivr.net/gh/acmesh-official/acme.sh@master/',
@@ -484,7 +486,8 @@ async function setupStatus() {
     initialized: hasConf && cert.exists,
     hasConf, certExists: cert.exists, cert,
     service: { active: st.active, sub: st.SubState, enabled: en.trim(), version: st.version },
-    hasNAT: !!fileInfo(NAT_UNIT),
+    hasNAT: !!fileInfo(natUnitFile()),
+    natActive: (await SVC.active('ocserv-nat')).trim(),
     acmeInstalled: !!fileInfo(CFG.acmeBin) || !!fileInfo('/usr/bin/acme.sh'),
     panel: { port: CFG.port, host: CFG.host, service: PANEL_SVC },
     outIf: await detectOutIf(),

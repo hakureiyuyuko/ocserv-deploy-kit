@@ -729,7 +729,7 @@ function wzRenderState() {
     '<tr><th>ocserv 服务</th><td>' + tag(svc.active === 'active', svc.active || '-') + ' <span class="muted">' + esc(svc.version || '') + ' · enabled=' + esc(svc.enabled || '-') + '</span></td></tr>' +
     '<tr><th>ocserv.conf</th><td>' + tag(s.hasConf, s.hasConf ? '已生成' : '尚未生成') + '</td></tr>' +
     '<tr><th>证书</th><td>' + tag(c.exists, c.exists ? ((c.subject || '') + ' · 剩余 ' + (c.daysLeft === undefined ? '-' : c.daysLeft) + ' 天') : '尚未安装') + '</td></tr>' +
-    '<tr><th>NAT 转发单元</th><td>' + tag(s.hasNAT, s.hasNAT ? '已安装' : '尚未安装') + '</td></tr>' +
+    '<tr><th>NAT 转发单元</th><td>' + tag(s.hasNAT, s.hasNAT ? ('已安装' + (s.natActive === 'active' ? ' · 运行中' : ' · 未运行')) : '尚未安装') + '</td></tr>' +
     '<tr><th>acme.sh</th><td>' + tag(s.acmeInstalled, s.acmeInstalled ? '已安装' : '尚未安装（第 2 步会自动下载）') + '</td></tr>' +
     '<tr><th>配置模板</th><td>' + tag(s.templates && s.templates.ok, (s.templates && s.templates.ok) ? '就绪' : ('缺失 ' + ((s.templates || {}).dir || ''))) + '</td></tr>' +
     '<tr><th>出口网卡</th><td>' + esc(s.outIf || '-') + '</td></tr>' +

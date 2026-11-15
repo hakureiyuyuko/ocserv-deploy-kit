@@ -149,6 +149,10 @@ async function logs(name, n) {
   return sel.slice(-lines).join('\n') || '（没有日志：' + f + ' 不存在，syslog 里也没有 ' + name + ' 的记录）';
 }
 
+function restartHint(name) {
+  return BACKEND === 'openrc' ? 'rc-service ' + name + ' restart' : 'systemctl restart ' + name;
+}
+
 function logsHint(name) {
   return BACKEND === 'openrc'
     ? 'rc-service ' + name + ' status / tail -n 50 /var/log/' + name + '.log'
@@ -158,5 +162,5 @@ function logsHint(name) {
 module.exports = {
   BACKEND, HAS_SYSTEMD, HAS_OPENRC,
   active, enabled, show, action, enable, disable,
-  daemonReload, natUnitPath, natInstall, reloadCmd, logs, logsHint
+  daemonReload, natUnitPath, natInstall, reloadCmd, logs, logsHint, restartHint
 };

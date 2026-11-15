@@ -308,6 +308,10 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
 
 ## 更新日志
 
+- **1.6.7** —— 修「NAT 转发单元显示尚未安装」：面板状态页把路径写死成 systemd 的
+  `/etc/systemd/system/ocserv-nat.service`，Alpine/OpenRC 下 NAT 装在 `/etc/init.d/ocserv-nat`，
+  于是明明在工作却显示未安装。现在路径跟随服务管理器，并额外显示「运行中 / 未运行」；
+  面板设置/命令行里的重启提示也按 systemd / OpenRC 给出正确命令。
 - **1.6.6** —— 修「acme.sh 已存在但 spawn ENOENT」：面板以前只看文件在不在，现在**实测能否执行**，
   并统一用 `/bin/sh` 调 acme.sh（它本来就是 POSIX sh 脚本），这样首行是 `#!/bin/bash`
   （Alpine 没 bash）或没有执行位也能跑；候选路径依次回退（配置值 → `/usr/bin/acme.sh` →
