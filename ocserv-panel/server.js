@@ -31,7 +31,7 @@ const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
 // acme.sh 的工作目录（证书、账号、dnsapi 插件都在这里）
 const ACME_HOME  = path.join(os.homedir() || '/root', '.acme.sh');
-const VERSION    = '1.6.5';
+const VERSION    = '1.6.6';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -410,7 +410,7 @@ async function certInfo() {
 }
 async function renew(force) {
   if (force) {
-    const r = await run(CFG.acmeBin, ['--renew', '--force', '-d', CFG.acmeDomain, '--server', CFG.acmeServer], null, 90000);
+    const r = await acmeRun(['--renew', '--force', '-d', CFG.acmeDomain, '--server', CFG.acmeServer], null, 90000);
     await SVC.action('reload', CFG.ocservService);
     return { ok: r.code === 0, out: ((r.out || '') + (r.err || '')).trim().split('\n').slice(-12).join('\n') };
   }
@@ -485,7 +485,7 @@ async function setupStatus() {
     hasConf, certExists: cert.exists, cert,
     service: { active: st.active, sub: st.SubState, enabled: en.trim(), version: st.version },
     hasNAT: !!fileInfo(NAT_UNIT),
-    acmeInstalled: !!fileInfo(CFG.acmeBin),
+    acmeInstalled: !!fileInfo(CFG.acmeBin) || !!fileInfo('/usr/bin/acme.sh'),
     panel: { port: CFG.port, host: CFG.host, service: PANEL_SVC },
     outIf: await detectOutIf(),
     templates: { ok: tpl('ocserv.conf.tpl') !== null, dir: TPL_DIR },
@@ -494,14 +494,35 @@ async function setupStatus() {
   };
 }
 
+// 一律用 /bin/sh 跑 acme.sh：它本身是 POSIX sh 脚本，
+// 这样即使首行是 #!/bin/bash（Alpine 没有 bash）或没有执行位，也能正常跑
+function acmeArgs(args) { return [CFG.acmeBin].concat(args); }
+async function acmeRun(args, env, timeout) {
+  return run('/bin/sh', acmeArgs(args), null, timeout || 60000, env);
+}
+// 真正判断“能不能用”，而不是只看文件在不在
+async function acmeWorks(p) {
+  if (!p) return false;
+  try {
+    const r = await run('/bin/sh', [p, '--version'], null, 10000);
+    const t = (r.out || '') + (r.err || '');
+    return r.code === 0 && /acme\.sh|v\d+\.\d+\.\d+/.test(t);
+  } catch (e) { return false; }
+}
+
 async function ensureAcme(L, email) {
-  if (fileInfo(CFG.acmeBin)) { L('acme.sh 已存在: ' + CFG.acmeBin); return true; }
-  // 发行版包（Alpine: apk add acme.sh）优先：纯 sh，不拉 bash，也不依赖镜像
-  if (fileInfo('/usr/bin/acme.sh')) {
-    CFG.acmeBin = '/usr/bin/acme.sh';
-    saveConfig(CFG);
-    L('v 使用系统 acme.sh: /usr/bin/acme.sh');
-    return true;
+  // 依次验证候选路径：存在 ≠ 能用（shebang 指向 bash、缺执行位、下载残缺都会 ENOENT/EACCES）
+  const cands = [...new Set([CFG.acmeBin, '/usr/bin/acme.sh', path.join(ACME_HOME, 'acme.sh')].filter(Boolean))];
+  for (const c of cands) {
+    if (await acmeWorks(c)) {
+      if (c !== CFG.acmeBin) { CFG.acmeBin = c; saveConfig(CFG); }
+      L('v 使用可用的 acme.sh: ' + c);
+      return true;
+    }
+    if (fileInfo(c)) {
+      const first = String(readText(c, '')).split('\n')[0].trim();
+      L('! ' + c + ' 存在但无法执行（首行: ' + (first || '空文件') + '），继续找其它 acme.sh');
+    }
   }
   const apk = await run('apk', ['add', '--no-cache', 'acme.sh'], null, 120000);
   if (apk.code === 0 && fileInfo('/usr/bin/acme.sh')) {
@@ -522,18 +543,24 @@ async function ensureAcme(L, email) {
   await run('chmod', ['755', '/tmp/acme.sh']);
   // 注意: acme.sh 安装时按“相对文件名”复制自己，必须在 /tmp 里执行
   const cmd = email
-    ? 'cd /tmp && ./acme.sh --install --accountemail "$EMAIL"'
-    : 'cd /tmp && ./acme.sh --install';
-  const r2 = await run('bash', ['-c', cmd], null, 120000, { EMAIL: email || '' });
-  if (r2.code !== 0 || !fileInfo(CFG.acmeBin)) { L('  x 安装失败:\n' + tailOf(r2)); return false; }
-  L('  v acme.sh 安装完成');
-  return true;
+    ? 'cd /tmp && sh ./acme.sh --install --nocron --accountemail "$EMAIL"'
+    : 'cd /tmp && sh ./acme.sh --install --nocron';
+  const r2 = await run('/bin/sh', ['-c', cmd], null, 120000, { EMAIL: email || '' });
+  if (r2.code !== 0) { L('  x 安装失败:\n' + tailOf(r2)); return false; }
+  if (await acmeWorks(path.join(ACME_HOME, 'acme.sh'))) {
+    CFG.acmeBin = path.join(ACME_HOME, 'acme.sh');
+    saveConfig(CFG);
+    L('  v acme.sh 安装完成: ' + CFG.acmeBin);
+    return true;
+  }
+  L('  x 安装后仍无法执行（看上面的输出）');
+  return false;
 }
 
 async function setAcmeEmail(L, email) {
-  await run(CFG.acmeBin, ['--set-default-ca', '--server', CFG.acmeServer], null, 30000);
+  await acmeRun(['--set-default-ca', '--server', CFG.acmeServer], null, 30000);
   if (!email) { L('未填账号邮箱：将注册“无联系邮箱”的账号（收不到到期提醒，续期仍由 cron 负责）'); return; }
-  const up = await run(CFG.acmeBin, ['--update-account', '--accountemail', email], null, 60000);
+  const up = await acmeRun(['--update-account', '--accountemail', email], null, 60000);
   if (up.code === 0) { L('账号邮箱已更新: ' + email); return; }
   const ac = path.join(path.dirname(CFG.acmeBin), 'account.conf');
   let t = readText(ac, null);
@@ -576,18 +603,18 @@ async function runIssue(L, opt, env) {
   L('证书目录: ' + certDir);
   // acme.sh 的 --install-cert 不会自己建父目录，必须先建好（否则它直接返回 1）
   try { fs.mkdirSync(certDir, { recursive: true }); } catch (e) {}
-  const sc = await run(CFG.acmeBin, ['--set-default-ca', '--server', CFG.acmeServer], null, 30000, env);
+  const sc = await acmeRun(['--set-default-ca', '--server', CFG.acmeServer], env, 30000);
   if (sc.code !== 0) L('! 设置默认 CA 失败: ' + tailOf(sc, 4));
   const args = ['--issue', '--server', CFG.acmeServer];
   if (opt.mode === 'dns') args.push('--dns', 'dns_' + opt.provider, '--dnssleep', String(opt.dnssleep || 30));
   else args.push('--standalone');
   args.push('-d', domain, '--keylength', 'ec-256');
   L('签发: acme.sh ' + args.join(' '));
-  const r1 = await run(CFG.acmeBin, args, null, 300000, env);
+  const r1 = await acmeRun(args, env, 300000);
   if (r1.code === 2) L('  证书仍有效，跳过签发 (acme.sh RENEW_SKIP=2)');
   else if (r1.code !== 0) { L('  x 签发失败:\n' + tailOf(r1, 20)); return false; }
   else L('  v 签发成功');
-  const ic = await run(CFG.acmeBin, ['--install-cert', '-d', domain,
+  const ic = await acmeRun(['--install-cert', '-d', domain,
     '--key-file', certDir + '/privkey.pem', '--fullchain-file', certDir + '/fullchain.pem',
     '--cert-file', certDir + '/cert.pem', '--ca-file', certDir + '/ca.pem',
     '--reloadcmd', SVC.reloadCmd(CFG.ocservService)], null, 120000, env);

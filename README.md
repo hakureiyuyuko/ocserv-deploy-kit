@@ -308,6 +308,10 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
 
 ## 更新日志
 
+- **1.6.6** —— 修「acme.sh 已存在但 spawn ENOENT」：面板以前只看文件在不在，现在**实测能否执行**，
+  并统一用 `/bin/sh` 调 acme.sh（它本来就是 POSIX sh 脚本），这样首行是 `#!/bin/bash`
+  （Alpine 没 bash）或没有执行位也能跑；候选路径依次回退（配置值 → `/usr/bin/acme.sh` →
+  `~/.acme.sh/acme.sh`），全不可用才下载安装，且安装改用 `sh`、加 `--nocron`。
 - **1.6.5** —— Alpine 两处修复：① 服务起不来是因为精简系统/VM 上 tun 是内核模块、没加载时
   `/dev/net/tun` 不存在，OpenRC 脚本现在自动 `modprobe tun` + `mknod`，并把失败原因写进
   `/var/log/ocserv.log`；② 续期不再依赖 bash —— 新增 **POSIX sh** 版续期脚本 + busybox crond 的

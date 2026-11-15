@@ -249,6 +249,9 @@ sed -i -e 's/@DOMAIN@/你的域名/' -e 's/@OCSERV_SERVICE@/ocserv/' -e 's/@PANE
 
 ## 更新日志
 
+- **1.6.6** —— acme.sh 可用性判断改为实测（`sh <acme.sh> --version`），并统一用 `/bin/sh` 调用，
+  修「文件在但 spawn ENOENT」；候选路径依次回退（配置值 → `/usr/bin/acme.sh` → `~/.acme.sh/acme.sh`），
+  下载安装改用 `sh` 且加 `--nocron`。
 - **1.6.5** —— OpenRC：续期改用 POSIX sh 脚本 + busybox crond（不再需要 bash/systemd）；
   `ensureAcme` 优先用系统 acme.sh（`/usr/bin/acme.sh`），dnsapi 插件改放到 `~/.acme.sh/dnsapi`
   并支持直接复用系统包自带的插件。Alpine 的 OpenRC 启动脚本会自动准备 `/dev/net/tun`。
