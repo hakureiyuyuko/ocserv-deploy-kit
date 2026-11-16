@@ -19,7 +19,7 @@
 # ============================================================================
 set -euo pipefail
 
-KIT_VERSION="1.6.7"
+KIT_VERSION="1.6.8"
 
 PANEL_PORT=19999
 PANEL_HOST="0.0.0.0"
@@ -85,6 +85,24 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq ocserv socat curl openssl ca-certificates cron >/dev/null
 echo "    ocserv $(/usr/sbin/ocserv --version 2>&1 | head -1 | awk '{print $NF}')"
+
+# Debian/Ubuntu 的 ocserv 包**不会**创建运行用户，而模板里写的是 run-as-user = ocserv；
+# 不补建的话面板「应用配置」时 --test-config 会直接报 error: unknown user: ocserv
+if ! getent group ocserv >/dev/null 2>&1; then
+  groupadd --system ocserv 2>/dev/null || true
+fi
+if ! getent passwd ocserv >/dev/null 2>&1; then
+  useradd --system -g ocserv -d /run/ocserv -s /usr/sbin/nologin \
+    -c "OpenConnect VPN server" ocserv 2>/dev/null || true
+fi
+# 密码文件也常常不存在（包不自带），先建空文件给 ocserv 用
+mkdir -p /etc/ocserv
+[ -f /etc/ocserv/ocpasswd ] || install -m 600 /dev/null /etc/ocserv/ocpasswd
+if getent passwd ocserv >/dev/null 2>&1; then
+  echo "    运行用户 ocserv: $(getent passwd ocserv | cut -d: -f3)/$(getent group ocserv | cut -d: -f3)"
+else
+  warn "创建运行用户 ocserv 失败，面板应用配置时会报 unknown user"
+fi
 
 # ---------------------------------------------------------------- 2. 面板
 say "2/4 安装管理面板"

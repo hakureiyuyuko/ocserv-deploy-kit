@@ -51,6 +51,20 @@ function renderRenew(tplText, o) {
   });
 }
 
+// 判断“每 worker 独立 TUN（isolate-workers）”在这台机器上会不会出问题。
+// 已知：ARM32 用户态 + 老内核（< 4.9）上，worker 建 TUN 设备会失败，
+// 现象是客户端登录后立刻断开、rx/tx 都是 0、vpns0 根本不出现。
+// 返回空串表示没问题，否则返回原因（用于日志）。
+function weakTunEnv(arch, kernelRelease) {
+  const a = String(arch || '').trim().toLowerCase();
+  const k = String(kernelRelease || '').trim();
+  const m = k.match(/^(\d+)\.(\d+)/);
+  const oldKernel = !!m && (Number(m[1]) < 4 || (Number(m[1]) === 4 && Number(m[2]) < 9));
+  if (a === 'armv7l' || a === 'armv6l' || a === 'arm') return 'ARM32 用户态（' + a + '）';
+  if (oldKernel) return '老内核 ' + k;
+  return '';
+}
+
 // NAT/转发 systemd 单元（开机自动恢复 iptables 规则）
 function natUnit(cidr, iface, ocservService) {
   const svc = ocservService || 'ocserv';
@@ -150,4 +164,4 @@ function dnsCredsIssue(provider, creds) {
   return '';
 }
 
-module.exports = { fillTpl, missingPlaceholders, maskBits, natUnit, natInitd, renderConf, renderRenew, validDomain, isIp, validUnixName, dnsCredsIssue };
+module.exports = { fillTpl, missingPlaceholders, maskBits, natUnit, natInitd, weakTunEnv, renderConf, renderRenew, validDomain, isIp, validUnixName, dnsCredsIssue };

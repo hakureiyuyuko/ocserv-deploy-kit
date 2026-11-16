@@ -109,13 +109,87 @@ if [ -n "$ACME_DOMAIN" ]; then
 fi
 
 echo "==> 1/6 检查 Node.js"
-if ! command -v node >/dev/null 2>&1; then
-  if [ "$AUTO_NODE" = "1" ]; then
-    echo "    未安装，正在通过 apt 安装 nodejs ..."
+
+node_major() {
+  command -v node >/dev/null 2>&1 || { echo 0; return; }
+  node -e 'console.log(process.versions.node.split(".")[0])' 2>/dev/null || echo 0
+}
+
+# apt 源的 nodejs 往往太旧（Ubuntu 20.04 只有 10.x）；armv7l/armv6l 从 Node 24 起
+# 官方不再提供构建，统一封顶到 22.x LTS。这里直接下官方二进制，绕开发行版源。
+install_node_tarball() {
+  local arch ver dir url base m
+  m="$(uname -m)"
+  case "$m" in
+    x86_64|amd64)  arch=x64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    armv7l|armv7*) arch=armv7l ;;
+    armv6l|armv6*) arch=armv6l ;;
+    *) echo "    ! 不支持的架构 $m，请自行安装 Node >= 18 后用 --no-node 跳过" >&2; return 1 ;;
+  esac
+  ver="${NODE_TARBALL_VERSION:-22.23.5}"
+  dir="/opt/node-v$ver-linux-$arch"
+  if [ -x "$dir/bin/node" ]; then
+    for b in node npm npx; do [ -e "$dir/bin/$b" ] && ln -sf "$dir/bin/$b" "/usr/local/bin/$b"; done
+    return 0
+  fi
+
+  echo "    改用官方二进制 Node v$ver（linux-$arch）..."
+  # 面板安装脚本可能被单独执行，curl/xz 不一定在
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl xz-utils ca-certificates >/dev/null 2>&1 || true
+  case "$arch" in
+    armv7l|armv6l) DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libatomic1 >/dev/null 2>&1 || true ;;
+  esac
+
+  for base in "https://nodejs.org/dist" "https://registry.npmmirror.com/-/binary/node"; do
+    url="$base/v$ver/node-v$ver-linux-$arch.tar.xz"
+    echo "      下载 $url"
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL --connect-timeout 10 --max-time 600 -o /tmp/node-dl.tar.xz "$url" || continue
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q -T 20 -O /tmp/node-dl.tar.xz "$url" || continue
+    else
+      echo "    ! 既没有 curl 也没有 wget" >&2
+      return 1
+    fi
+    if [ -s /tmp/node-dl.tar.xz ]; then
+      mkdir -p /opt
+      if tar -xJf /tmp/node-dl.tar.xz -C /opt; then
+        rm -f /tmp/node-dl.tar.xz
+        for b in node npm npx; do [ -e "$dir/bin/$b" ] && ln -sf "$dir/bin/$b" "/usr/local/bin/$b"; done
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+if [ "$(node_major)" -lt 18 ]; then
+  if [ "$AUTO_NODE" != "1" ]; then
+    echo "    当前 Node $(command -v node >/dev/null 2>&1 && node -v || echo 未安装)，需要 >= 18；已指定 --no-node" >&2
+    exit 1
+  fi
+  if [ "$(node_major)" = "0" ]; then
+    echo "    未安装，先试 apt 源的 nodejs ..."
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq && apt-get install -y -qq nodejs
-  else
-    echo "    未安装 Node.js，请先安装 (>=18) 或去掉 --no-node" >&2; exit 1
+    apt-get update -qq || true
+    apt-get install -y -qq nodejs >/dev/null 2>&1 || true
+  fi
+  if [ "$(node_major)" -lt 18 ]; then
+    install_node_tarball || {
+      cat >&2 <<'E'
+    安装 Node.js 失败。任选一种手动处理后再重跑：
+      1) 官方二进制（armv7l/armv6l 请用 22.x，Node 24 起没有这两个架构）：
+           curl -fsSLO https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-<arch>.tar.xz
+           tar -xJf node-v22.23.5-linux-<arch>.tar.xz -C /opt
+           ln -sf /opt/node-v22.23.5-linux-<arch>/bin/{node,npm,npx} /usr/local/bin/
+           apt-get install -y libatomic1 xz-utils      # arm 上通常需要 libatomic1
+      2) NodeSource：curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
+      3) 自己装好后用 --no-node 跳过本步
+E
+      exit 1
+    }
+    hash -r
   fi
 fi
 NODE_BIN="$(command -v node)"

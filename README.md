@@ -278,6 +278,23 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
   > 也可以直接装 openconnect 测：
   > `echo '密码' | openconnect --protocol=anyconnect --user=vpnuser --passwd-on-stdin --authenticate <域名>:<端口>`
 
+- **客户端登录后几秒就断开，`rx: 0, tx: 0`，`ip link` 里看不到 `vpns0`**
+  → 这是 `isolate-workers = true`（每个 worker 独立 TUN）在 **ARM32 / 老内核（< 4.9）** 上建不出设备。
+  1.6.8 起面板检测到这类环境会在应用配置时自动改成 `false`；也可在「选项」页手动关闭。
+  修复后日志里应看到 `vpns0` 出现并且 `RX/TX` 在增长。
+- **应用配置时报 `error: unknown user: ocserv`**
+  → Debian/Ubuntu 的 ocserv 包**不会**创建运行用户，而模板用的是 `run-as-user = ocserv`。
+  1.6.8 起 `install.sh` 会自动补建用户/组与 `/etc/ocserv/ocpasswd`；老部署可手动执行：
+  ```bash
+  groupadd --system ocserv; useradd --system -g ocserv -d /run/ocserv -s /usr/sbin/nologin ocserv
+  install -m 600 /dev/null /etc/ocserv/ocpasswd
+  ```
+- **`install.sh` 在 Node 版本检查处中止**（如 Ubuntu 20.04 源里只有 Node 10，或 ARM32）
+  → 1.6.8 起会自动下载官方二进制（`x64/arm64/armv7l/armv6l`，ARM32 封顶 22.x，因为 Node 24 起
+  不再提供 armv7l）。手动处理见脚本失败时打印的提示；arm 上还需要 `libatomic1`。
+- **面板说 NAT 未安装，但 `iptables -t nat -S` 里其实有 MASQUERADE**
+  → 1.6.7 起状态判断跟随 systemd/OpenRC 的路径；1.6.8 起面板启动时如果发现
+  「配置里是 `route = default` 但 NAT 单元不存在」，会自动补装（分流路由的情况不会动）。
 - 连接异常时先排除域名被按 SNI 拦截（部分机房会拦特定域名）：
   `openssl s_client -connect <IP>:<端口> -servername <你的域名>` 与
   `openssl s_client -connect <IP>:<端口> -servername www.baidu.com` 对比，只有前者失败就是被拦了。
@@ -308,6 +325,11 @@ curl $J -X POST $B/auth --data "$X<config-auth client=\"vpn\" type=\"auth-reply\
 
 ## 更新日志
 
+- **1.6.8** —— 适配低配/ARM 环境与老发行版：①`install.sh` 补建 `ocserv` 运行用户与 `ocpasswd`
+  （Debian 系包不自带，否则应用配置报 unknown user）；②Node 安装改为「apt 不行就下官方二进制」，
+  识别 armv7l/armv6l 并封顶 22.x；③`isolate-workers` 在 ARM32 / 内核 < 4.9 上自动置为 false
+  （这类环境每 worker 建 TUN 会失败，表现为登录即断、rx/tx 为 0），并加进「选项」页；
+  ④面板启动自愈：`route = default` 但 NAT 单元缺失时自动补装。
 - **1.6.7** —— 修「NAT 转发单元显示尚未安装」：面板状态页把路径写死成 systemd 的
   `/etc/systemd/system/ocserv-nat.service`，Alpine/OpenRC 下 NAT 装在 `/etc/init.d/ocserv-nat`，
   于是明明在工作却显示未安装。现在路径跟随服务管理器，并额外显示「运行中 / 未运行」；

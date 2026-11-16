@@ -31,7 +31,7 @@ const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
 // acme.sh 的工作目录（证书、账号、dnsapi 插件都在这里）
 const ACME_HOME  = path.join(os.homedir() || '/root', '.acme.sh');
-const VERSION    = '1.6.7';
+const VERSION    = '1.6.8';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {
@@ -40,7 +40,9 @@ const OPTION_KEYS = {
   'try-mtu-discovery':   { label: 'MTU 自动发现', desc: '自动探测可用 MTU，避免大包不通（建议保持开启）。', def: true },
   'tunnel-all-dns':      { label: 'DNS 全部走隧道', desc: '客户端把全部 DNS 解析都发给 VPN 下发的服务器。', def: true },
   'deny-roaming':        { label: '禁止漫游', desc: '客户端 IP 变化（切换网络）立即断开，更严格。', def: false },
-  'ping-leases':         { label: '下发地址前 ping 探测', desc: '分配 IP 前先探测是否占用，避免地址冲突（大网络才需要）。', def: false }
+  'ping-leases':         { label: '下发地址前 ping 探测', desc: '分配 IP 前先探测是否占用，避免地址冲突（大网络才需要）。', def: false },
+
+  'isolate-workers':     { label: '隔离 worker（每连接独立 TUN）', desc: '每个 worker 用独立 TUN，隔离更好；但 ARM32 / 老内核（< 4.9）上会建不出设备，表现为客户端登录即断、rx/tx 为 0 —— 这类机器请关闭。', def: true },
 };
 
 const DEFAULTS = {
@@ -761,8 +763,20 @@ async function doApply(p, L) {
     CERTDIR: '/etc/ssl/securev/' + domain, VPNPORT: vpnPort, VPNNET: vpnNet, VPNMASK: vpnMask,
     DOMAIN: domain.split('.').slice(1).join('.'), DNS1: dns1, DNS2: dns2
   });
+  // ARM32 / 老内核上 isolate-workers 会建不出 TUN（登录即断、rx/tx 为 0），自动关掉
+  let finalConf = conf;
+  const arch = (await run('uname', ['-m'])).out.trim();
+  const krel = (await run('uname', ['-r'])).out.trim();
+  const weak = TPL.weakTunEnv(arch, krel);
+  if (weak && /^[ \t]*isolate-workers[ \t]*=[ \t]*true[ \t]*$/m.test(finalConf)) {
+    finalConf = finalConf.replace(/^[ \t]*isolate-workers[ \t]*=[ \t]*true[ \t]*$/m, 'isolate-workers = false');
+    L('! 检测到 ' + weak + '：这类环境上每 worker 建 TUN 会失败（客户端登录后立刻断开、rx/tx 为 0）');
+    L('  已自动把 isolate-workers 设为 false（也可在「选项」页手动切换）');
+  }
   if (fileInfo(CFG.ocservConf)) { try { fs.copyFileSync(CFG.ocservConf, CFG.ocservConf + '.bak-' + Date.now()); } catch (e) {} }
-  writeAs(CFG.ocservConf, conf, 0o644);
+  // 密码文件不存在时 ocserv 虽然能过校验，但没人能登录 —— 先建空文件
+  if (!fileInfo(CFG.ocpasswd)) { try { writeAs(CFG.ocpasswd, '', 0o600); } catch (e) {} }
+  writeAs(CFG.ocservConf, finalConf, 0o644);
   const tc = await run(CFG.ocservBin, ['-c', CFG.ocservConf, '--test-config'], null, 30000);
   if (tc.code !== 0) { L('x 配置校验失败:\n' + tailOf(tc, 10)); return false; }
   L('v 已写入 ' + CFG.ocservConf + ' 并通过 --test-config 校验');
@@ -1100,7 +1114,31 @@ server.listen(CFG.port, CFG.host, () => {
   console.log('[panel] ' + CFG.title + ' v' + VERSION);
   console.log('[panel] ' + (isTls ? 'https' : 'http') + '://' + CFG.host + ':' + CFG.port + ' 已启动');
   console.log('[panel] ocserv 服务: ' + CFG.ocservService + ' | 配置: ' + CFG.ocservConf);
+  healNat().catch(() => {});
 });
+
+// 自愈：配置里是全局路由（route = default）但 NAT 单元不存在时补装。
+// 典型场景：上次「应用」在中途失败（例如 unknown user），后面手工改好了配置却没有 NAT。
+async function healNat() {
+  try {
+    if (!fileInfo(CFG.ocservConf) || fileInfo(natUnitFile())) return;
+    const txt = readText(CFG.ocservConf, '') || '';
+    if (!/^\s*route\s*=\s*default\s*$/m.test(txt)) return;   // 分流路由就不擅自加 NAT
+    const net = (txt.match(/^\s*ipv4-network\s*=\s*([0-9.]+)/m) || [])[1];
+    const mask = (txt.match(/^\s*ipv4-netmask\s*=\s*([0-9.]+)/m) || [])[1];
+    if (!net) return;
+    const cidr = net + '/' + maskBits(mask || '255.255.255.0');
+    const outIf = await detectOutIf();
+    if (!outIf) return;
+    const text = SVC.BACKEND === 'openrc'
+      ? TPL.natInitd(cidr, outIf, CFG.ocservService)
+      : natUnit(cidr, outIf);
+    const r = await SVC.natInstall(text, 'ocserv-nat');
+    console.log('[panel] NAT 单元缺失，已自动补装（' + cidr + ' → ' + outIf + '）：' + (r.code === 0 ? '成功' : '失败'));
+  } catch (e) {
+    console.log('[panel] 自动补装 NAT 失败: ' + ((e && e.message) || e));
+  }
+}
 
 process.on('uncaughtException', (e) => console.error('[panel] uncaught: ' + ((e && e.stack) || e)));
 process.on('unhandledRejection', (e) => console.error('[panel] unhandled: ' + ((e && e.stack) || e)));
