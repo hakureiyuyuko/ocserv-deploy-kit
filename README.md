@@ -1,5 +1,14 @@
 # ocserv 部署套件
 
+> [!IMPORTANT]
+> **开发重心已转移**：自 2026-11-16 起，新功能集中在
+> **[ocserv-go](https://github.com/hakureiyuyuko/ocserv-go)** —— Go 重写的服务端（gVisor 用户态
+> TCP/IP 栈，不需要 tun / NET_ADMIN / iptables，无特权 LXC / Docker 可用），自带同款面板
+> （`backend=go`）与双架构发行包。
+>
+> **本仓库（C 版 ocserv 部署套件）原则上只做安全更新**，额外只接受必要的 bug 修复，
+> 不再添加新功能。新部署建议直接用 ocserv-go。
+
 一键装好 **ocserv（OpenConnect / Cisco AnyConnect 兼容 VPN）+ Web 管理面板**。
 安装脚本只负责装，域名、证书、VPN 用户、网段都在面板里配置。
 
