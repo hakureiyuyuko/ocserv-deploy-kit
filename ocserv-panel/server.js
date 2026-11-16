@@ -31,7 +31,7 @@ const PUBLIC_DIR = path.join(BASE, 'public');
 const CRED_FILE  = path.join(BASE, 'admin-cred.txt');
 // acme.sh 的工作目录（证书、账号、dnsapi 插件都在这里）
 const ACME_HOME  = path.join(os.homedir() || '/root', '.acme.sh');
-const VERSION    = '1.6.8';
+const VERSION    = '1.6.7';
 
 // 可在面板上一键开关的 ocserv 布尔选项（白名单，只碰这几项）
 const OPTION_KEYS = {

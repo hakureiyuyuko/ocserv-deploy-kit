@@ -249,12 +249,11 @@ sed -i -e 's/@DOMAIN@/你的域名/' -e 's/@OCSERV_SERVICE@/ocserv/' -e 's/@PANE
 
 ## 更新日志
 
-- **1.6.8** —— 适配低配/ARM 与老发行版：`install.sh` 在 apt 源 Node 太旧时改下官方二进制
+- **1.6.7** —— 状态页的 NAT 单元路径按服务管理器取（OpenRC 用 `/etc/init.d/ocserv-nat`）并显示
+  运行状态，重启提示按后端给出正确命令；`install.sh` 在 apt 源 Node 太旧时改下官方二进制
   （x64/arm64/armv7l/armv6l，ARM32 封顶 22.x）；主安装脚本补建 `ocserv` 用户与 `ocpasswd`；
-  新增「隔离 worker」选项并在 ARM32 / 内核 < 4.9 上应用配置时自动置 false；面板启动时若发现
+  新增「隔离 worker」选项并在 ARM32 / 内核 < 4.9 上自动置 false；面板启动时若发现
   `route = default` 但 NAT 单元缺失会自动补装。
-- **1.6.7** —— 状态页的 NAT 单元路径按服务管理器取（OpenRC 用 `/etc/init.d/ocserv-nat`），
-  并显示服务是否在运行；重启提示同样按后端给出正确命令。
 - **1.6.6** —— acme.sh 可用性判断改为实测（`sh <acme.sh> --version`），并统一用 `/bin/sh` 调用，
   修「文件在但 spawn ENOENT」；候选路径依次回退（配置值 → `/usr/bin/acme.sh` → `~/.acme.sh/acme.sh`），
   下载安装改用 `sh` 且加 `--nocron`。
